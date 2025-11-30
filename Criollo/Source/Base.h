@@ -13,5 +13,15 @@
 	#endif
 #endif
 
+#ifdef _WIN32
+	#ifndef CORECLR_DELEGATE_CALLTYPE
+		#define CORECLR_DELEGATE_CALLTYPE __stdcall
+	#endif
+#else
+	#ifndef CORECLR_DELEGATE_CALLTYPE
+		#define CORECLR_DELEGATE_CALLTYPE
+	#endif
+#endif
+
 
 #endif

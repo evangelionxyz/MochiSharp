@@ -144,12 +144,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\EntityManager.cpp" />
     <ClCompile Include="Source\Main.cpp" />
+    <ClCompile Include="Source\ScriptBindings.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CriolloCore\CriolloCore.vcxproj">
       <Project>{5dfe6a18-f5d4-46e9-9791-5de2302b0e74}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\Criollo\Criollo.vcxproj">
+      <Project>{5dfe6a18-f5d4-46e9-9791-5de2302b0e74}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Entity.h" />
+    <ClInclude Include="Source\EntityManager.h" />
+    <ClInclude Include="Source\Math.h" />
+    <ClInclude Include="Source\ScriptBindings.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="INTERNAL_CALLS_FIX.md" />
+    <None Include="SHUTDOWN_FIX.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

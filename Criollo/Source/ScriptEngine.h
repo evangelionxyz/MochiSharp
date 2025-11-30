@@ -6,16 +6,14 @@
 #include <windows.h>
 #include <string>
 
-namespace Criollo
+#include "Base.h"
+
+namespace criollo
 {
     typedef bool (*PFN_InitializeCoreRuntime)(const wchar_t*, const wchar_t*);
     typedef void (*PFN_ShutdownCoreRuntime)();
     typedef bool (*PFN_CreateTestMethodDelegate)(void**);
     typedef bool (*PFN_CreateManagedDelegate)(const char*, const char*, const char*, void**);
-
-    typedef int (*TestMethodDelegate)();
-    typedef int (*AddDelegate)(int, int);
-    typedef void (*LogMessageDelegate)(const char*);
 
     class ScriptEngine
     {

@@ -9,7 +9,7 @@
 #include <iostream>
 #include <locale>
 
-namespace Criollo
+namespace criollo
 {
     CoreCLRHost::CoreCLRHost()
         : m_coreCLRModule(nullptr)

@@ -13,7 +13,7 @@ typedef int (*coreclr_shutdown_ptr)(void* hostHandle, unsigned int domainId);
 typedef int (*coreclr_create_delegate_ptr)(void* hostHandle, unsigned int domainId, const char* entryPointAssemblyName, const char* entryPointTypeName, const char* entryPointMethodName, void** delegate);
 typedef int (*coreclr_execute_assembly_ptr)(void* hostHandle, unsigned int domainId, int argc, const char** argv, const char* managedAssemblyPath, unsigned int* exitCode);
 
-namespace Criollo
+namespace criollo
 {
     class CoreCLRHost
     {

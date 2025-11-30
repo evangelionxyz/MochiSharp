@@ -1,8 +1,10 @@
-﻿using System;
+﻿// Copyright (c) 2025 Evangelion Manuhutu
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Criollo
+namespace TestScript.Core
 {
     public class Test
     {
@@ -30,7 +32,7 @@ namespace Criollo
         // Example: Method with no return value
         public static void LogMessage(string message)
         {
-            Console.WriteLine($"[C# Log] {message}");
+            Console.WriteLine($"[C# Log W L W L] {message}");
         }
     }
 }

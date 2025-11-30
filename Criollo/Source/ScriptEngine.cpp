@@ -3,7 +3,7 @@
 #include "pch.h"
 #include "ScriptEngine.h"
 
-namespace Criollo
+namespace criollo
 {
 	ScriptEngine::ScriptEngine()
 		: m_hCoreDll(nullptr)

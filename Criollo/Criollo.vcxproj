@@ -22,7 +22,7 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{5dfe6a18-f5d4-46e9-9791-5de2302b0e74}</ProjectGuid>
-    <RootNamespace>CriolloCore</RootNamespace>
+    <RootNamespace>Criollo</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -164,7 +164,7 @@
   <ItemGroup>
     <ClCompile Include="Source\CoreCLRHost.cpp" />
     <ClCompile Include="Source\ScriptEngine.cpp" />
-    <ClCompile Include="Source\DLLMain.cpp" />
+    <ClCompile Include="Source\CriolloLib.cpp" />
     <ClCompile Include="Source\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

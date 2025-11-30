@@ -3,7 +3,7 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="CriolloCore/CriolloCore.vcxproj" Id="5dfe6a18-f5d4-46e9-9791-5de2302b0e74" />
+  <Project Path="Criollo/Criollo.vcxproj" Id="5dfe6a18-f5d4-46e9-9791-5de2302b0e74" />
   <Project Path="TestScript/TestScript.csproj" />
   <Project Path="TestRuntime/TestRuntime.vcxproj" Id="b6446382-bfc3-4884-91dd-246e99db56bf" />
 </Solution>
