@@ -20,7 +20,6 @@ typedef void (*LogMessageDelegate)(const char*);
 int main()
 {
 	std::wcout << L"Criollo CoreCLR Host Test" << std::endl;
-	std::wcout << L"==========================" << std::endl << std::endl;
 
 	// Load the CriolloCore DLL
 	HMODULE hCoreDll = LoadLibraryW(L"CriolloCore.dll");
@@ -43,7 +42,6 @@ int main()
 		return 1;
 	}
 
-	
 	std::wstring runtimePath = LR"(C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.0)";
 	std::wstring assemblyPath = std::filesystem::current_path().wstring() + L"\\TestScript.dll";
 
@@ -113,21 +111,12 @@ int main()
 	}
 
 	// Shutdown
+	std::wcout << std::endl;
 	std::wcout << L"Shutting down..." << std::endl;
 	ShutdownCoreRuntime();
 	FreeLibrary(hCoreDll);
 
-	std::wcout << std::endl;
-
-	// Shutdown CoreCLR
-	std::wcout << L"Shutting down CoreCLR..." << std::endl;
-	ShutdownCoreRuntime();
-	std::wcout << L"CoreCLR shut down successfully!" << std::endl;
-
-	FreeLibrary(hCoreDll);
-	
 	std::wcout << std::endl << L"Press Enter to exit...";
 	std::wcin.get();
-	
 	return 0;
 }

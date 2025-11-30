@@ -26,11 +26,7 @@ namespace Criollo
         bool ExecuteAssembly(const std::wstring& assemblyPath, int argc = 0, const char** argv = nullptr, unsigned int* exitCode = nullptr);
 
         template<typename TDelegate>
-        bool CreateDelegate(
-            const std::string& assemblyName,
-            const std::string& typeName,
-            const std::string& methodName,
-            TDelegate** delegatePtr)
+        bool CreateDelegate(const std::string& assemblyName, const std::string& typeName, const std::string& methodName, TDelegate **delegatePtr)
         {
             if (!m_hostHandle || !m_coreclr_create_delegate)
             {
@@ -43,13 +39,12 @@ namespace Criollo
                 assemblyName.c_str(),
                 typeName.c_str(),
                 methodName.c_str(),
-                reinterpret_cast<void**>(delegatePtr)
+                reinterpret_cast<void **>(delegatePtr)
             );
 
             return result >= 0;
         }
 
-        // Check if runtime is initialized
         bool IsInitialized() const { return m_hostHandle != nullptr; }
 
     private:
