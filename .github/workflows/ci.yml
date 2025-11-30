@@ -1,0 +1,50 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+        platform: [x64]
+
+    env:
+      SOLUTION_FILE: Criollo.slnx
+
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup MSBuild (Visual Studio 2026 Preview)
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: msbuild $env:SOLUTION_FILE /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }}
+
+      - name: Restore TestScript dependencies
+        shell: pwsh
+        run: dotnet restore .\TestScript\TestScript.csproj
+
+      - name: Build .NET projects
+        shell: pwsh
+        run: dotnet build .\TestScript\TestScript.csproj --configuration ${{ matrix.configuration }} --no-restore
+
+      - name: Build native solution
+        shell: pwsh
+        run: msbuild $env:SOLUTION_FILE /t:Build /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /m
+
