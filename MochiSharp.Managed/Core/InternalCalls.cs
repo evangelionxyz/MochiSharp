@@ -1,12 +1,12 @@
-﻿using System;
-using TestScript.Scene;
+using System;
+using MochiSharp.Managed.Scene;
 
-namespace TestScript.Core;
+namespace MochiSharp.Managed.Core;
 
 // Internal calls to C++ functions
 // NOTE: Internal calls don't work with standard CoreCLR hosting!
 // Use delegates instead
-internal static class InternalCalls
+public static class InternalCalls
 {
     // Delegates for internal functionality
     public delegate void Entity_GetTransformDelegate(ulong entityID, out Transform transform);

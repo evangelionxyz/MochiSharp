@@ -1,6 +1,6 @@
-﻿using TestScript.Mathf;
+using MochiSharp.Managed.Mathf;
 
-namespace TestScript.Scene;
+namespace MochiSharp.Managed.Scene;
 
 public struct Transform
 {

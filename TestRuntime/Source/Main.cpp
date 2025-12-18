@@ -38,10 +38,11 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	test::Entity* player = entityManager.CreateEntity("Player");
 	player->transform.position = { 0.0f, 0.0f, 0.0f };
 
-	const char* TestAppDLLName = "TestScript";
-	const char* EntityBridgeClassName = "TestScript.Core.EntityBridge";
-	const char* InternalCallsClassName = "TestScript.Core.InternalCalls";
-	const char* ReflectionBridgeClassName = "TestScript.Core.ReflectionBridge";
+	// Use MochiSharp.Managed for core engine functionality
+	const char* ManagedDLLName = "MochiSharp.Managed";
+	const char* EntityBridgeClassName = "MochiSharp.Managed.Core.EntityBridge";
+	const char* InternalCallsClassName = "MochiSharp.Managed.Core.InternalCalls";
+	const char* ReflectionBridgeClassName = "MochiSharp.Managed.Core.ReflectionBridge";
 
 	// Initialize internal call delegates (C++ -> C# property setters)
     std::println("Initializing internal call system..");
@@ -54,8 +55,8 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	SetSetTransformDelegateFunc setSetTransformDelegate = nullptr;
 	DescribeTypeDelegate describeTypeDelegate = nullptr;
 	
-	// Create delegates to set the C# delegate properties
-    if (!host->CreateDelegate(TestAppDLLName, InternalCallsClassName, "set_Entity_GetTransform", (void **)(&setGetTransformDelegate)))
+	// Create delegates to set the C# delegate properties from MochiSharp.Managed
+    if (!host->CreateDelegate(ManagedDLLName, InternalCallsClassName, "set_Entity_GetTransform", (void **)(&setGetTransformDelegate)))
     {
         std::println("Failed to create set_Entity_GetTransform delegate");
     }
@@ -70,7 +71,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
         std::println("Entity_GetTransform initialized!");
     }
 	
-    if (!host->CreateDelegate(TestAppDLLName, InternalCallsClassName, "set_Entity_SetTransform", (void **)(&setSetTransformDelegate)))
+    if (!host->CreateDelegate(ManagedDLLName, InternalCallsClassName, "set_Entity_SetTransform", (void **)(&setSetTransformDelegate)))
     {
         std::println("Failed to create set_Entity_SetTransform delegate");
     }
@@ -86,7 +87,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
     }
 
 	// Managed reflection helper for script metadata
-	if (!host->CreateDelegate(TestAppDLLName, ReflectionBridgeClassName, "DescribeType", (void**)(&describeTypeDelegate)))
+	if (!host->CreateDelegate(ManagedDLLName, ReflectionBridgeClassName, "DescribeType", (void**)(&describeTypeDelegate)))
 	{
 		std::println("Failed to create DescribeType delegate");
 	}
@@ -119,21 +120,21 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	EntityUpdateDelegate updateDelegate = nullptr;
 	EntityStopDelegate stopDelegate = nullptr;
 
-	if (!host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "Start", (void**)(&startDelegate)))
+	if (!host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "Start", (void**)(&startDelegate)))
 	{
 		std::println("Failed to create Start delegate");
 		entityManager.Shutdown();
 		return;
 	}
 
-	if (!host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "Update", (void**)(&updateDelegate)))
+	if (!host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "Update", (void**)(&updateDelegate)))
 	{
 		std::println("Failed to create Update delegate");
 		entityManager.Shutdown();
 		return;
 	}
 
-	if (!host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "Stop", (void**)(&stopDelegate)))
+	if (!host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "Stop", (void**)(&stopDelegate)))
 	{
 		std::println("Failed to create Stop delegate");
 		entityManager.Shutdown();
@@ -150,7 +151,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	CreateEntityInstanceDelegate createInstanceDelegate = nullptr;
 	
 	
-    if (host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "CreateEntityInstance", (void **)(&createInstanceDelegate)))
+    if (host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "CreateEntityInstance", (void **)(&createInstanceDelegate)))
     {
         std::println("Calling CreateEntityInstance with ID={}, Type={}", player->id, "TestScript.Scene.PlayerController");
         createInstanceDelegate(player->id, "TestScript.Scene.PlayerController");
@@ -218,7 +219,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	// Unregister entity from C#
 	typedef void (CORECLR_DELEGATE_CALLTYPE *UnregisterEntityDelegate)(uint64_t entityID);
 	UnregisterEntityDelegate unregisterDelegate = nullptr;
-	if (host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "UnregisterEntity", (void**)(&unregisterDelegate)))
+	if (host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "UnregisterEntity", (void**)(&unregisterDelegate)))
 	{
 		unregisterDelegate(player->id);
 	}
@@ -229,7 +230,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	// Clear EntityBridge dictionary
 	typedef void (CORECLR_DELEGATE_CALLTYPE *ClearEntityBridgeDelegate)();
 	ClearEntityBridgeDelegate clearEntityBridge = nullptr;
-    if (host->CreateDelegate(TestAppDLLName, EntityBridgeClassName, "ClearAll", (void **)(&clearEntityBridge)))
+    if (host->CreateDelegate(ManagedDLLName, EntityBridgeClassName, "ClearAll", (void **)(&clearEntityBridge)))
     {
         clearEntityBridge();
         std::println("EntityBridge cleared");
@@ -238,7 +239,7 @@ void TestEntitySystem(mochi::CoreCLRHostAPI* host)
 	// Clear internal call delegates to prevent dangling pointers
 	typedef void (CORECLR_DELEGATE_CALLTYPE *ClearInternalCallsDelegate)();
 	ClearInternalCallsDelegate clearInternalCalls = nullptr;
-    if (host->CreateDelegate(TestAppDLLName, InternalCallsClassName, "ClearDelegates", (void **)(&clearInternalCalls)))
+    if (host->CreateDelegate(ManagedDLLName, InternalCallsClassName, "ClearDelegates", (void **)(&clearInternalCalls)))
     {
         clearInternalCalls();
         std::println("Internal call delegates cleared");
@@ -261,7 +262,7 @@ int main()
     }
 
     std::string runtimePath = R"(C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.1)";
-    std::string assemblyPath = std::filesystem::current_path().string() + "\\TestScript.dll";
+    std::string assemblyPath = std::filesystem::current_path().string() + "\\MochiSharp.Managed.dll";
 
     // Check if paths exist
     bool pathsExist = true;
@@ -275,7 +276,7 @@ int main()
     if (!std::filesystem::exists(assemblyPath))
     {
     	std::println("Assembly path does not exist: {}", assemblyPath);
-    	std::println("Please build TestScript project or update the assemblyPath variable.");
+    	std::println("Please build MochiSharp.Managed project or update the assemblyPath variable.");
         pathsExist = false;
     }
 

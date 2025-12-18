@@ -1,6 +1,7 @@
 using System;
-using TestScript.Mathf;
-using TestScript.Core;
+using MochiSharp.Managed.Mathf;
+using MochiSharp.Managed.Scene;
+using MochiSharp.Managed.Core;
 
 namespace TestScript.Scene;
 

@@ -1,13 +1,13 @@
 using System;
-using TestScript.Core;
+using MochiSharp.Managed.Core;
 
-namespace TestScript.Scene;
+namespace MochiSharp.Managed.Scene;
 
 public class Entity
 {
     public readonly ulong ID;
 
-    internal Entity(ulong id)
+    public Entity(ulong id)
     {
         ID = id;
     }

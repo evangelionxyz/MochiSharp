@@ -13,8 +13,27 @@ namespace MochiSharp.Managed.Core
         /// <param name="message">The message to log.</param>
         public static void Log(string message)
         {
-            Console.WriteLine($"[DEBUG] {message}");
+            Console.WriteLine($"[MochiSharp] {message}");
         }
+
+        /// <summary>
+        /// Logs a warning message to the console.
+        /// </summary>
+        /// <param name="message">The warning message to log.</param>
+        public static void LogWarning(string message)
+        {
+            Console.WriteLine($"[MochiSharp WARNING] {message}");
+        }
+
+        /// <summary>
+        /// Logs an error message to the console.
+        /// </summary>
+        /// <param name="message">The error message to log.</param>
+        public static void LogError(string message)
+        {
+            Console.WriteLine($"[MochiSharp ERROR] {message}");
+        }
+
         /// <summary>
         /// Asserts that a condition is true. If the condition is false, an exception is thrown.
         /// </summary>

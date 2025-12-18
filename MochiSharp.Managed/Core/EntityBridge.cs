@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using TestScript.Scene;
+using MochiSharp.Managed.Scene;
 
-namespace TestScript.Core;
+namespace MochiSharp.Managed.Core;
 
 // Static bridge for C++ to call into entity instances
 public static class EntityBridge

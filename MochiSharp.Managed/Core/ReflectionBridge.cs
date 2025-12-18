@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
-namespace TestScript.Core;
+namespace MochiSharp.Managed.Core;
 
 /// <summary>
 /// Reflection utilities that can be called from native code via delegates.
