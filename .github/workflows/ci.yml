@@ -54,7 +54,7 @@ jobs:
 
       - name: Restore NuGet packages
         shell: pwsh
-        run: msbuild $env:SOLUTION_FILE /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }}
+        run: msbuild $env:SOLUTION_FILE /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform="${{ matrix.platform }}"
 
       - name: Restore TestScript dependencies
         shell: pwsh
@@ -66,5 +66,5 @@ jobs:
 
       - name: Build native solution
         shell: pwsh
-        run: msbuild $env:SOLUTION_FILE /t:Build /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /m
+        run: msbuild $env:SOLUTION_FILE /t:Build /p:Configuration=${{ matrix.configuration }} /p:Platform="${{ matrix.platform }}" /m
 
