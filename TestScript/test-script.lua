@@ -3,6 +3,7 @@ project "TestScript"
     kind "SharedLib"
     language "C#"
     dotnetframework "net9.0"
+    platforms { "Any CPU" }
 
     targetdir (OUTPUT_DIR)
     objdir (INTOOUTPUT_DIR)
@@ -21,6 +22,9 @@ project "TestScript"
             EnableDynamicLoading = "true",
             ImplicitUsing = "enable"
         }
+
+    filter { "action:vs*", "platforms:x64" }
+        vsprops { PlatformTarget = "x64" }
         
     filter "configurations:Debug"
         symbols "on"

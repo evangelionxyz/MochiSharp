@@ -3,7 +3,6 @@ project "TestRuntime"
     kind "ConsoleApp"
     language "C++"
     cppdialect "c++23"
-    architecture "x64"
 
     targetdir (OUTPUT_DIR)
     objdir (INTOOUTPUT_DIR)
@@ -45,3 +44,6 @@ project "TestRuntime"
         optimize "speed"
         symbols "off"
         defines { "NDEBUG" }
+    
+    filter "platforms:Any CPU"
+        architecture "x64"
