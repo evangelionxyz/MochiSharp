@@ -16,7 +16,7 @@ jobs:
         platform: [Any CPU]
 
     env:
-      SOLUTION_FILE: Criollo.sln
+      SOLUTION_FILE: MochiSharp.sln
       PREMAKE_VERSION: 5.0.0-beta7
 
     steps:
