@@ -33,7 +33,7 @@ jobs:
       - name: Setup MSBuild (Visual Studio 2022)
         uses: microsoft/setup-msbuild@v2
         with:
-          vs-version: '[17.14]'
+          vs-version: '[17.0,18.0)'
 
       - name: Install Premake
         shell: pwsh
