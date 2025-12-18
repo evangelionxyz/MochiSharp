@@ -14,6 +14,10 @@ project "TestScript"
         "Scene/**.cs"
     }
 
+    links {
+        "MochiSharp.Managed"
+    }
+
     filter { "action:vs* or system:windows" }
         vsprops {
             AppendTargetFrameworkToOutputPath = "false",
