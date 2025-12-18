@@ -19,23 +19,23 @@ namespace criollo
     {
     public:
         CoreCLRHost();
-        ~CoreCLRHost();
 
-        bool Initialize(const std::wstring& runtimePath, const std::wstring& assemblyPath);
+        bool Initialize(const std::string& runtimePath, const std::string& assemblyPath);
         bool Shutdown();
-        bool ExecuteAssembly(const std::wstring& assemblyPath, int argc = 0, const char** argv = nullptr, unsigned int* exitCode = nullptr);
+
+        bool ExecuteAssembly(const std::string& assemblyPath, int argc = 0, const char** argv = nullptr, unsigned int* exitCode = nullptr);
 
         template<typename TDelegate>
         bool CreateDelegate(const std::string& assemblyName, const std::string& typeName, const std::string& methodName, TDelegate **delegatePtr)
         {
-            if (!m_hostHandle || !m_coreclr_create_delegate)
+            if (!m_HostHandle || !m_coreclr_create_delegate)
             {
                 return false;
             }
 
             int result = m_coreclr_create_delegate(
-                m_hostHandle,
-                m_domainId,
+                m_HostHandle,
+                m_DomainId,
                 assemblyName.c_str(),
                 typeName.c_str(),
                 methodName.c_str(),
@@ -45,19 +45,17 @@ namespace criollo
             return result >= 0;
         }
 
-        bool IsInitialized() const { return m_hostHandle != nullptr; }
+        bool IsInitialized() const { return m_HostHandle != nullptr; }
 
     private:
-        // Helper methods
-        std::string WStringToString(const std::wstring& wstr);
-        std::wstring GetTrustedPlatformAssemblies(const std::wstring& runtimePath);
-        std::wstring GetDirectory(const std::wstring& path);
-        void BuildTpaList(const std::wstring& directory, std::wstring& tpaList);
+        std::string GetTrustedPlatformAssemblies(const std::string& runtimePath) const;
+        static std::string GetDirectory(const std::string& path);
+        static void BuildTpaList(const std::string &directory, std::string &tpaList);
 
         // CoreCLR runtime handles
-        HMODULE m_coreCLRModule;
-        void* m_hostHandle;
-        unsigned int m_domainId;
+        HMODULE m_CoreCLRModule;
+        void* m_HostHandle;
+        unsigned int m_DomainId;
 
         // CoreCLR function pointers
         coreclr_initialize_ptr m_coreclr_initialize;
@@ -66,8 +64,8 @@ namespace criollo
         coreclr_execute_assembly_ptr m_coreclr_execute_assembly;
 
         // Runtime information
-        std::wstring m_runtimePath;
-        std::wstring m_assemblyPath;
+        std::string m_RuntimePath;
+        std::string m_AssemblyPath;
     };
 }
 

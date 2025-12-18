@@ -5,7 +5,7 @@
 
 namespace criollo
 {
-    std::unordered_map<uint64_t, Entity*> ScriptBindings::s_Entities;
+    std::unordered_map<uint64_t, Entity *> ScriptBindings::s_Entities;
 
     void ScriptBindings::Initialize()
     {
@@ -18,7 +18,7 @@ namespace criollo
         std::cout << "[ScriptBindings] Shutdown" << std::endl;
     }
 
-    void ScriptBindings::RegisterEntity(uint64_t id, Entity* entity)
+    void ScriptBindings::RegisterEntity(uint64_t id, Entity *entity)
     {
         if (entity)
         {
@@ -33,7 +33,7 @@ namespace criollo
         std::cout << "[ScriptBindings] Unregistered entity: " << id << std::endl;
     }
 
-    Entity* ScriptBindings::GetEntity(uint64_t id)
+    Entity *ScriptBindings::GetEntity(uint64_t id)
     {
         auto it = s_Entities.find(id);
         if (it != s_Entities.end())
@@ -41,27 +41,27 @@ namespace criollo
         return nullptr;
     }
 
-    void ScriptBindings::Entity_GetTransform(uint64_t entityID, TransformComponent* outTransform)
+    void ScriptBindings::Entity_GetTransform(uint64_t entityID, TransformComponent *outTransform)
     {
-        Entity* entity = GetEntity(entityID);
+        Entity *entity = GetEntity(entityID);
         if (entity && outTransform)
         {
             *outTransform = entity->transform;
         }
     }
 
-    void ScriptBindings::Entity_SetTransform(uint64_t entityID, TransformComponent* transform)
+    void ScriptBindings::Entity_SetTransform(uint64_t entityID, TransformComponent *transform)
     {
-        Entity* entity = GetEntity(entityID);
+        Entity *entity = GetEntity(entityID);
         if (entity && transform)
         {
             entity->transform = *transform;
         }
     }
 
-    bool ScriptBindings::Entity_HasComponent(uint64_t entityID, const char* componentType)
+    bool ScriptBindings::Entity_HasComponent(uint64_t entityID, const char *componentType)
     {
-        Entity* entity = GetEntity(entityID);
+        Entity *entity = GetEntity(entityID);
         if (!entity)
             return false;
 
@@ -70,7 +70,7 @@ namespace criollo
         return true;
     }
 
-    void ScriptBindings::Log(const char* message)
+    void ScriptBindings::Log(const char *message)
     {
         std::cout << "[C++ Native Log] " << message << std::endl;
     }
@@ -78,22 +78,22 @@ namespace criollo
     // C-style exports for managed code
     extern "C"
     {
-        __declspec(dllexport) void Entity_GetTransform(uint64_t entityID, TransformComponent* outTransform)
+        __declspec(dllexport) void Entity_GetTransform(uint64_t entityID, TransformComponent *outTransform)
         {
             ScriptBindings::Entity_GetTransform(entityID, outTransform);
         }
 
-        __declspec(dllexport) void Entity_SetTransform(uint64_t entityID, TransformComponent* transform)
+        __declspec(dllexport) void Entity_SetTransform(uint64_t entityID, TransformComponent *transform)
         {
             ScriptBindings::Entity_SetTransform(entityID, transform);
         }
 
-        __declspec(dllexport) bool Entity_HasComponent(uint64_t entityID, const char* componentType)
+        __declspec(dllexport) bool Entity_HasComponent(uint64_t entityID, const char *componentType)
         {
             return ScriptBindings::Entity_HasComponent(entityID, componentType);
         }
 
-        __declspec(dllexport) void NativeLog(const char* message)
+        __declspec(dllexport) void NativeLog(const char *message)
         {
             ScriptBindings::Log(message);
         }

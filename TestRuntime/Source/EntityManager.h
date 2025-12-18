@@ -25,7 +25,7 @@ namespace criollo
     typedef void (CORECLR_DELEGATE_CALLTYPE *EntityStartDelegate)(uint64_t entityID);
     typedef void (CORECLR_DELEGATE_CALLTYPE *EntityUpdateDelegate)(uint64_t entityID, float deltaTime);
     typedef void (CORECLR_DELEGATE_CALLTYPE *EntityStopDelegate)(uint64_t entityID);
-    typedef void* (CORECLR_DELEGATE_CALLTYPE *CreateEntityInstanceDelegate)(const char* typeName, uint64_t entityID);
+    typedef void (CORECLR_DELEGATE_CALLTYPE *CreateEntityInstanceDelegate)(const char *typeName, uint64_t entityID);
 
     struct ScriptInstance
     {
@@ -43,7 +43,7 @@ namespace criollo
         ~EntityManager();
 
         void Initialize();
-        void Shutdown();
+        void Shutdown(bool callManagedCallbacks = true);
 
         // Entity management
         Entity* CreateEntity(const std::string& name);

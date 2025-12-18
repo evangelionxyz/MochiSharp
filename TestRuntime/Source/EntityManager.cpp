@@ -12,7 +12,7 @@ namespace criollo
 
     EntityManager::~EntityManager()
     {
-        Shutdown();
+        Shutdown(false);
     }
 
     void EntityManager::Initialize()
@@ -21,9 +21,12 @@ namespace criollo
         std::cout << "[EntityManager] Initialized" << std::endl;
     }
 
-    void EntityManager::Shutdown()
+    void EntityManager::Shutdown(bool callManagedCallbacks)
     {
-        StopAll();
+        if (callManagedCallbacks)
+        {
+            StopAll();
+        }
         m_Scripts.clear();
         m_Entities.clear();
         ScriptBindings::Shutdown();

@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Evangelion Manuhutu
 
 using System;
+using TestScript.Mathf;
 
 namespace TestScript.Scene
 {

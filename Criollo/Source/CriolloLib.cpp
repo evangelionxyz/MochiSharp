@@ -10,7 +10,7 @@ static CoreCLRHost* g_pCoreHost = nullptr;
 
 extern "C"
 {
-    CRIOLLO_API bool InitializeCoreRuntime(const wchar_t* runtimePath, const wchar_t* assemblyPath)
+    CRIOLLO_API bool InitializeCoreRuntime(const char* runtimePath, const char* assemblyPath)
     {
         if (g_pCoreHost != nullptr)
         {
@@ -28,7 +28,7 @@ extern "C"
         return true;
     }
 
-    // Example function to shutdown CoreCLR
+    // Example function to shut down CoreCLR
     CRIOLLO_API void ShutdownCoreRuntime()
     {
         if (g_pCoreHost != nullptr)
@@ -39,7 +39,7 @@ extern "C"
         }
     }
 
-    CRIOLLO_API bool ExecuteManagedAssembly(const wchar_t* assemblyPath)
+    CRIOLLO_API bool ExecuteManagedAssembly(const char* assemblyPath)
     {
         if (g_pCoreHost == nullptr || !g_pCoreHost->IsInitialized())
         {

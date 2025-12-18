@@ -6,7 +6,6 @@
 #include "Math.h"
 #include <string>
 
-// Test ECS Simple
 namespace criollo
 {
     struct TransformComponent

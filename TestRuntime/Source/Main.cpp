@@ -5,26 +5,17 @@
 #include "ScriptBindings.h"
 
 #include <iostream>
+#include <print>
 #include <filesystem>
 #include <windows.h>
 #include <thread>
 #include <chrono>
 
-typedef bool (*InitializeCoreRuntimeFunc)(const wchar_t*, const wchar_t*);
+typedef bool (*InitializeCoreRuntimeFunc)(const char*, const char*);
 typedef void (*ShutdownCoreRuntimeFunc)();
-typedef bool (*ExecuteManagedAssemblyFunc)(const wchar_t*);
+typedef bool (*ExecuteManagedAssemblyFunc)(const char*);
 typedef bool (*CreateTestMethodDelegateFunc)(void**);
 typedef bool (*CreateManagedDelegateFunc)(const char*, const char*, const char*, void**);
-
-#if defined(_WIN32)
-	#ifndef CORECLR_DELEGATE_CALLTYPE
-		#define CORECLR_DELEGATE_CALLTYPE __stdcall
-	#endif
-#else
-	#ifndef CORECLR_DELEGATE_CALLTYPE
-		#define CORECLR_DELEGATE_CALLTYPE
-	#endif
-#endif
 
 typedef int (CORECLR_DELEGATE_CALLTYPE *TestMethodDelegate)();
 typedef int (CORECLR_DELEGATE_CALLTYPE *AddDelegate)(int, int);
@@ -89,7 +80,7 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 
 	const char* TestAppDLLName = "TestScript";
 	const char* EntityBridgeClassName = "TestScript.Scene.EntityBridge";
-	const char* InternalCallsClassName = "TestScript.Scene.InternalCalls";
+	const char* InternalCallsClassName = "TestScript.Core.InternalCalls";
 
 	// Initialize internal call delegates (C++ -> C# property setters)
 	std::wcout << L"Initializing internal call system..." << std::endl;
@@ -264,91 +255,75 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 
 int main()
 {
-	std::wcout << L"Criollo CoreCLR Host Test" << std::endl;
+	const std::string dllName = "Criollo.dll";
+    HMODULE hCoreDll = LoadLibraryA(dllName.c_str());
+    if (!hCoreDll)
+    {
+    	std::println("Failed to load {}", dllName);
+        return 1;
+    }
 
-	// Load the Criollo DLL
-	HMODULE hCoreDll = LoadLibraryW(L"Criollo.dll");
-	if (!hCoreDll)
-	{
-		std::wcerr << L"Failed to load Criollo.dll" << std::endl;
-		return 1;
-	}
+    // Get function pointers
+    auto InitializeCoreRuntime = reinterpret_cast<InitializeCoreRuntimeFunc>(GetProcAddress(hCoreDll, "InitializeCoreRuntime"));
+    auto ShutdownCoreRuntime = reinterpret_cast<ShutdownCoreRuntimeFunc>(GetProcAddress(hCoreDll, "ShutdownCoreRuntime"));
+    auto ExecuteManagedAssembly = reinterpret_cast<ExecuteManagedAssemblyFunc>(GetProcAddress(hCoreDll, "ExecuteManagedAssembly"));
+    auto CreateManagedDelegate = reinterpret_cast<CreateManagedDelegateFunc>(GetProcAddress(hCoreDll, "CreateManagedDelegate"));
 
-	// Get function pointers
-	auto InitializeCoreRuntime = (InitializeCoreRuntimeFunc)(GetProcAddress(hCoreDll, "InitializeCoreRuntime"));
-	auto ShutdownCoreRuntime = (ShutdownCoreRuntimeFunc)(GetProcAddress(hCoreDll, "ShutdownCoreRuntime"));
-	auto ExecuteManagedAssembly = (ExecuteManagedAssemblyFunc)(GetProcAddress(hCoreDll, "ExecuteManagedAssembly"));
-	auto CreateManagedDelegate = (CreateManagedDelegateFunc)(GetProcAddress(hCoreDll, "CreateManagedDelegate"));
+    if (!InitializeCoreRuntime || !ShutdownCoreRuntime)
+    {
+    	std::println("Failed to get function pointers from Criollo.dll");
+        FreeLibrary(hCoreDll);
+        return 1;
+    }
 
-	if (!InitializeCoreRuntime || !ShutdownCoreRuntime)
-	{
-		std::wcerr << L"Failed to get function pointers from Criollo.dll" << std::endl;
-		FreeLibrary(hCoreDll);
-		return 1;
-	}
+    std::string runtimePath = R"(C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.1)";
+    std::string assemblyPath = std::filesystem::current_path().string() + "\\TestScript.dll";
 
-	std::wstring runtimePath = LR"(C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.0)";
-	std::wstring assemblyPath = std::filesystem::current_path().wstring() + L"\\TestScript.dll";
+    // Check if paths exist
+    bool pathsExist = true;
+    if (!std::filesystem::exists(runtimePath))
+    {
+    	std::println("Runtime path does not exist: {}", runtimePath);
+    	std::println("Please update the runtimePath variable with your .NET installation path.");
+        pathsExist = false;
+    }
 
-	// Check if paths exist
-	bool pathsExist = true;
-	if (!std::filesystem::exists(runtimePath))
-	{
-		std::wcerr << L"Warning: Runtime path does not exist: " << runtimePath << std::endl;
-		std::wcerr << L"Please update the runtimePath variable with your .NET installation path." << std::endl;
-		pathsExist = false;
-	}
+    if (!std::filesystem::exists(assemblyPath))
+    {
+    	std::println("Assembly path does not exist: {}", assemblyPath);
+    	std::println("Please build TestScript project or update the assemblyPath variable.");
+        pathsExist = false;
+    }
 
-	if (!std::filesystem::exists(assemblyPath))
-	{
-		std::wcerr << L"Warning: Assembly path does not exist: " << assemblyPath << std::endl;
-		std::wcerr << L"Please build TestScript project or update the assemblyPath variable." << std::endl;
-		pathsExist = false;
-	}
+    if (!pathsExist)
+    {
+        FreeLibrary(hCoreDll);
+        return 1;
+    }
 
-	if (!pathsExist)
-	{
-		std::wcout << std::endl << L"Press Enter to exit...";
-		std::wcin.get();
-		FreeLibrary(hCoreDll);
-		return 1;
-	}
+    // Initialize CoreCLR
+	std::println("Initializing CoreCLR");
+    if (!InitializeCoreRuntime(runtimePath.c_str(), assemblyPath.c_str()))
+    {
+    	std::println("Failed to initialize CoreCLR runtime");
+        FreeLibrary(hCoreDll);
+        return 1;
+    }
 
-	// Initialize CoreCLR
-	std::wcout << L"Initializing CoreCLR..." << std::endl;
-	if (!InitializeCoreRuntime(runtimePath.c_str(), assemblyPath.c_str()))
-	{
-		std::wcerr << L"Failed to initialize CoreCLR runtime" << std::endl;
-		std::wcerr << L"Make sure the runtime path points to a valid .NET installation." << std::endl;
-		FreeLibrary(hCoreDll);
-		return 1;
-	}
-	std::wcout << L"CoreCLR initialized successfully!" << std::endl << std::endl;
+    TestBasicFunctionality(CreateManagedDelegate);
+    TestEntitySystem(CreateManagedDelegate);
 
-	// Test basic functionality
-	TestBasicFunctionality(CreateManagedDelegate);
+    // Shutdown
+	std::println("Shutting down...");
 
-	// Test Entity Component System
-	TestEntitySystem(CreateManagedDelegate);
+    // Give C# GC a chance to finalize objects
+	std::println("Waiting for GC...");
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-	// Shutdown
-	std::wcout << std::endl;
-	std::wcout << L"Shutting down..." << std::endl;
-	
-	// Give C# GC a chance to finalize objects
-	std::wcout << L"Waiting for cleanup..." << std::endl;
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	
-	// Shutdown CoreCLR
-	std::wcout << L"Shutting down CoreCLR..." << std::endl;
-	ShutdownCoreRuntime();
-	std::wcout << L"CoreCLR shutdown complete" << std::endl;
-	
-	// Unload DLL
-	std::wcout << L"Unloading Criollo.dll..." << std::endl;
-	FreeLibrary(hCoreDll);
-	std::wcout << L"Criollo.dll unloaded" << std::endl;
-
-	std::wcout << L"Application terminated successfully" << std::endl;
-	return 0;
+    // Shutdown CoreCLR & Unload DLL
+    ShutdownCoreRuntime();
+	std::println("Unloading {}...", dllName);
+    FreeLibrary(hCoreDll);
+    return 0;
 }
+

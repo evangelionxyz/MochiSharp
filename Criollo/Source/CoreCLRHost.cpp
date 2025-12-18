@@ -4,17 +4,17 @@
 
 #include "CoreCLRHost.h"
 #include <filesystem>
-#include <array>
-#include <codecvt>
 #include <iostream>
+#include <array>
+#include <print>
 #include <locale>
 
 namespace criollo
 {
     CoreCLRHost::CoreCLRHost()
-        : m_coreCLRModule(nullptr)
-        , m_hostHandle(nullptr)
-        , m_domainId(0)
+        : m_CoreCLRModule(nullptr)
+        , m_HostHandle(nullptr)
+        , m_DomainId(0)
         , m_coreclr_initialize(nullptr)
         , m_coreclr_shutdown(nullptr)
         , m_coreclr_create_delegate(nullptr)
@@ -22,60 +22,54 @@ namespace criollo
     {
     }
 
-    CoreCLRHost::~CoreCLRHost()
+    bool CoreCLRHost::Initialize(const std::string& runtimePath, const std::string& assemblyPath)
     {
-        Shutdown();
-    }
-
-    bool CoreCLRHost::Initialize(const std::wstring& runtimePath, const std::wstring& assemblyPath)
-    {
-        if (m_hostHandle != nullptr)
+        if (m_HostHandle != nullptr)
         {
             return false; // Already initialized
         }
 
-        m_runtimePath = runtimePath;
-        m_assemblyPath = assemblyPath;
+        m_RuntimePath = runtimePath;
+        m_AssemblyPath = assemblyPath;
 
         // Construct the CoreCLR DLL path
-        std::wstring coreCLRDllPath = runtimePath + L"\\coreclr.dll";
+        const std::string coreCLRDllPath = runtimePath + "\\coreclr.dll";
 
         // Load CoreCLR DLL
-        m_coreCLRModule = LoadLibraryExW(coreCLRDllPath.c_str(), nullptr, 0);
-        if (!m_coreCLRModule)
+        m_CoreCLRModule = LoadLibraryExA(coreCLRDllPath.c_str(), nullptr, 0);
+        if (!m_CoreCLRModule)
         {
-            std::wcout << "Failed to load " << coreCLRDllPath << L'\n';
+        	std::println("Failed to load {}", coreCLRDllPath);
             return false;
         }
 
         // Get CoreCLR hosting functions
-        m_coreclr_initialize = (coreclr_initialize_ptr)(GetProcAddress(m_coreCLRModule, "coreclr_initialize"));
-		m_coreclr_shutdown = (coreclr_shutdown_ptr)(GetProcAddress(m_coreCLRModule, "coreclr_shutdown"));
-        m_coreclr_create_delegate = (coreclr_create_delegate_ptr)(GetProcAddress(m_coreCLRModule, "coreclr_create_delegate"));
-        m_coreclr_execute_assembly = (coreclr_execute_assembly_ptr)(GetProcAddress(m_coreCLRModule, "coreclr_execute_assembly"));
+        m_coreclr_initialize = reinterpret_cast<coreclr_initialize_ptr>(GetProcAddress(m_CoreCLRModule, "coreclr_initialize"));
+		m_coreclr_shutdown = reinterpret_cast<coreclr_shutdown_ptr>(GetProcAddress(m_CoreCLRModule, "coreclr_shutdown"));
+        m_coreclr_create_delegate = reinterpret_cast<coreclr_create_delegate_ptr>(GetProcAddress(m_CoreCLRModule, "coreclr_create_delegate"));
+        m_coreclr_execute_assembly = reinterpret_cast<coreclr_execute_assembly_ptr>(GetProcAddress(m_CoreCLRModule, "coreclr_execute_assembly"));
 
         if (!m_coreclr_initialize || !m_coreclr_shutdown || !m_coreclr_create_delegate || !m_coreclr_execute_assembly)
         {
-            FreeLibrary(m_coreCLRModule);
-            m_coreCLRModule = nullptr;
+            FreeLibrary(m_CoreCLRModule);
+            m_CoreCLRModule = nullptr;
             return false;
         }
 
         // Build Trusted Platform Assemblies (TPA) list
-        std::wstring tpaList = GetTrustedPlatformAssemblies(runtimePath);
+        const std::string tpaList = GetTrustedPlatformAssemblies(runtimePath);
 
-        // Get the current executable path
-        std::array<wchar_t, MAX_PATH> exePath;
-        GetModuleFileNameW(nullptr, exePath.data(), MAX_PATH);
+        // Get the current executable path (native host)
+        std::array<char, MAX_PATH> moduleFilename{};
+        GetModuleFileNameA(nullptr, moduleFilename.data(), static_cast<DWORD>(moduleFilename.size()));
+        const std::string exePath(moduleFilename.data());
+        const std::string appPath = GetDirectory(assemblyPath);
 
-        // Get app paths
-        std::wstring appPath = GetDirectory(assemblyPath);
-        
-        // Convert paths to narrow strings
-        std::string exePathStr = WStringToString(exePath.data());
-        std::string appPathStr = WStringToString(appPath);
-        std::string tpaListStr = WStringToString(tpaList);
-        std::string runtimePathStr = WStringToString(runtimePath);
+        // Diagnostics
+        std::cout << "[CoreCLRHost] runtimePath=" << runtimePath << std::endl;
+        std::cout << "[CoreCLRHost] assemblyPath=" << assemblyPath << std::endl;
+        std::cout << "[CoreCLRHost] appPath=" << appPath << std::endl;
+        std::cout << "[CoreCLRHost] TPA length=" << tpaList.size() << std::endl;
 
         // Define CoreCLR properties
         std::vector<const char*> propertyKeys = {
@@ -86,25 +80,28 @@ namespace criollo
             "PLATFORM_RESOURCE_ROOTS"
         };
 
+        const std::string nativeDllSearchDirs = runtimePath + ";" + appPath;
+
         const char* propertyValues[] = {
-            tpaListStr.c_str(),
-            appPathStr.c_str(),
-            appPathStr.c_str(),
-            runtimePathStr.c_str(),
-            appPathStr.c_str()
+            tpaList.c_str(),
+            appPath.c_str(),
+            appPath.c_str(),
+            nativeDllSearchDirs.c_str(),
+            appPath.c_str()
         };
 
         // Initialize CoreCLR
-        int result = m_coreclr_initialize(exePathStr.c_str(), "CriolloHost",
+        const int result = m_coreclr_initialize(exePath.c_str(), "CriolloHost",
             static_cast<int>(propertyKeys.size()), propertyKeys.data(),
-            propertyValues, &m_hostHandle, &m_domainId
+            propertyValues, &m_HostHandle, &m_DomainId
         );
 
         if (result < 0)
         {
-            FreeLibrary(m_coreCLRModule);
-            m_coreCLRModule = nullptr;
-            m_hostHandle = nullptr;
+            std::cout << "[CoreCLRHost] coreclr_initialize failed with code " << result << std::endl;
+            FreeLibrary(m_CoreCLRModule);
+            m_CoreCLRModule = nullptr;
+            m_HostHandle = nullptr;
             return false;
         }
 
@@ -113,18 +110,18 @@ namespace criollo
 
     bool CoreCLRHost::Shutdown()
     {
-        if (m_hostHandle && m_coreclr_shutdown)
+    	std::println("Shutting down CoreCLR...");
+
+        if (m_HostHandle && m_coreclr_shutdown)
         {
-            m_coreclr_shutdown(m_hostHandle, m_domainId);
-            m_hostHandle = nullptr;
-            m_domainId = 0;
+            m_coreclr_shutdown(m_HostHandle, m_DomainId);
+            m_HostHandle = nullptr;
+            m_DomainId = 0;
         }
 
-        if (m_coreCLRModule)
-        {
-            FreeLibrary(m_coreCLRModule);
-            m_coreCLRModule = nullptr;
-        }
+        // Avoid unloading coreclr.dll explicitly; let process teardown handle it to prevent
+        // potential access violations from late CRT/managed callbacks.
+        m_CoreCLRModule = nullptr;
 
         m_coreclr_initialize = nullptr;
         m_coreclr_shutdown = nullptr;
@@ -134,46 +131,33 @@ namespace criollo
         return true;
     }
 
-    bool CoreCLRHost::ExecuteAssembly(const std::wstring& assemblyPath, int argc, const char** argv, unsigned int* exitCode)
+    bool CoreCLRHost::ExecuteAssembly(const std::string& assemblyPath, int argc, const char** argv, unsigned int* exitCode)
     {
-        if (!m_hostHandle || !m_coreclr_execute_assembly)
+        if (!m_HostHandle || !m_coreclr_execute_assembly)
         {
             return false;
         }
-
-        std::string assemblyPathStr = WStringToString(assemblyPath);
         unsigned int tempExitCode = 0;
         
         int result = m_coreclr_execute_assembly(
-            m_hostHandle,
-            m_domainId,
+            m_HostHandle,
+            m_DomainId,
             argc,
             argv,
-            assemblyPathStr.c_str(),
+            assemblyPath.c_str(),
             exitCode ? exitCode : &tempExitCode
         );
 
         return result >= 0;
     }
 
-    std::string CoreCLRHost::WStringToString(const std::wstring& wstr)
+    std::string CoreCLRHost::GetTrustedPlatformAssemblies(const std::string& runtimePath) const
     {
-        if (wstr.empty())
-            return {};
-
-        int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.length()), nullptr, 0, nullptr, nullptr);
-        std::string result(size, 0);
-        WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.length()), &result[0], size, nullptr, nullptr);
-        return result;
-    }
-
-    std::wstring CoreCLRHost::GetTrustedPlatformAssemblies(const std::wstring& runtimePath)
-    {
-        std::wstring tpaList;
+        std::string tpaList;
         BuildTpaList(runtimePath, tpaList);
         
         // Also add the app directory if different from runtime
-        std::wstring appDir = GetDirectory(m_assemblyPath);
+        std::string appDir = GetDirectory(m_AssemblyPath);
         if (appDir != runtimePath)
         {
             BuildTpaList(appDir, tpaList);
@@ -182,17 +166,17 @@ namespace criollo
         return tpaList;
     }
 
-    std::wstring CoreCLRHost::GetDirectory(const std::wstring& path)
+    std::string CoreCLRHost::GetDirectory(const std::string& path)
     {
         std::filesystem::path p(path);
         if (std::filesystem::is_directory(p))
         {
             return path;
         }
-        return p.parent_path().wstring();
+        return p.parent_path().string();
     }
 
-    void CoreCLRHost::BuildTpaList(const std::wstring& directory, std::wstring& tpaList)
+    void CoreCLRHost::BuildTpaList(const std::string& directory, std::string& tpaList)
     {
         try
         {
@@ -206,14 +190,14 @@ namespace criollo
                 if (!entry.is_regular_file())
                     continue;
 
-                std::wstring extension = entry.path().extension().wstring();
-                if (extension == L".dll" || extension == L".exe")
+                const std::string extension = entry.path().extension().string();
+                if (extension == ".dll")
                 {
                     if (!tpaList.empty())
                     {
-                        tpaList += L";";
+                        tpaList += ";";
                     }
-                    tpaList += entry.path().wstring();
+                    tpaList += entry.path().string();
                 }
             }
         }
