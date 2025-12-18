@@ -7,6 +7,7 @@
 #include <iostream>
 #include <print>
 #include <filesystem>
+#include <string>
 #include <windows.h>
 #include <thread>
 #include <chrono>
@@ -26,6 +27,7 @@ typedef void (CORECLR_DELEGATE_CALLTYPE *Entity_GetTransformDelegate)(uint64_t e
 typedef void (CORECLR_DELEGATE_CALLTYPE *Entity_SetTransformDelegate)(uint64_t entityID, criollo::TransformComponent* transform);
 typedef bool (CORECLR_DELEGATE_CALLTYPE *Entity_HasComponentDelegate)(uint64_t entityID, const char* componentType);
 typedef void (CORECLR_DELEGATE_CALLTYPE *LogDelegate)(const char* message);
+typedef int (CORECLR_DELEGATE_CALLTYPE *DescribeTypeDelegate)(const char* typeName, char* buffer, int bufferSize);
 
 void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 {
@@ -42,6 +44,7 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 	const char* TestAppDLLName = "TestScript";
 	const char* EntityBridgeClassName = "TestScript.Core.EntityBridge";
 	const char* InternalCallsClassName = "TestScript.Core.InternalCalls";
+	const char* ReflectionBridgeClassName = "TestScript.Core.ReflectionBridge";
 
 	// Initialize internal call delegates (C++ -> C# property setters)
     std::println("Initializing internal call system..");
@@ -52,6 +55,7 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 	
 	SetGetTransformDelegateFunc setGetTransformDelegate = nullptr;
 	SetSetTransformDelegateFunc setSetTransformDelegate = nullptr;
+	DescribeTypeDelegate describeTypeDelegate = nullptr;
 	
 	// Create delegates to set the C# delegate properties
     if (!CreateManagedDelegate(TestAppDLLName, InternalCallsClassName, "set_Entity_GetTransform", (void **)(&setGetTransformDelegate)))
@@ -84,6 +88,35 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
         std::println("Entity_SetTransform initialized!");
     }
 
+	// Managed reflection helper for script metadata
+	if (!CreateManagedDelegate(TestAppDLLName, ReflectionBridgeClassName, "DescribeType", (void**)(&describeTypeDelegate)))
+	{
+		std::wcerr << L"Failed to create DescribeType delegate" << std::endl;
+	}
+	else
+	{
+		std::println("DescribeType delegate initialized!");
+	}
+
+	auto logTypeMetadata = [&](const char* typeName)
+	{
+		if (!describeTypeDelegate)
+		{
+			return;
+		}
+
+		int requiredSize = describeTypeDelegate(typeName, nullptr, 0);
+		if (requiredSize <= 0)
+		{
+			std::println("DescribeType returned invalid size for {}", typeName);
+			return;
+		}
+
+		std::string buffer(static_cast<size_t>(requiredSize), '\0');
+		describeTypeDelegate(typeName, buffer.data(), requiredSize);
+		std::println("Type metadata for {}: {}", typeName, buffer.c_str());
+	};
+
 	// Create delegates for lifecycle methods (using static bridge methods)
 	EntityStartDelegate startDelegate = nullptr;
 	EntityUpdateDelegate updateDelegate = nullptr;
@@ -111,6 +144,9 @@ void TestEntitySystem(CreateManagedDelegateFunc CreateManagedDelegate)
 	}
 
     std::println("Successfully created all entity lifecycle delegates!");
+
+	// Dump managed metadata for the target script type
+	logTypeMetadata("TestScript.Scene.PlayerController");
 
 	// Create entity instance in C# (using EntityBridge)
 	typedef void (CORECLR_DELEGATE_CALLTYPE *CreateEntityInstanceDelegate)(uint64_t entityID, const char* typeName);
