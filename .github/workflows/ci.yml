@@ -55,7 +55,7 @@ jobs:
 
       - name: Restore NuGet packages
         shell: pwsh
-        run: msbuild $env:SLN_FILE_MANAGED /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform="Any CPU" ^
+        run: msbuild $env:SLN_FILE_MANAGED /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform="Any CPU"
 
       - name: Build native solution
         shell: pwsh
