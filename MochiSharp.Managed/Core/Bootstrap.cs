@@ -41,6 +41,12 @@ namespace MochiSharp.Managed.Core
         {
             try
             {
+                string fullPath = Path.GetFullPath(asmPath);
+                if (_scriptContext != null && string.Equals(_scriptContext.PluginPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return _scriptContext.GetDerivedTypes(baseTypeFullName);
+                }
+
                 var asm = Assembly.LoadFrom(asmPath);
 
                 string asmDir = Path.GetDirectoryName(asm.Location) ?? string.Empty;
@@ -172,8 +178,15 @@ namespace MochiSharp.Managed.Core
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
                 string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
 
-                GetContextOrThrow().CreateInstance(instanceKey, typeName);
-                _hostHook?.Log($"Created instance {instanceKey}: {typeName}");
+                bool created = GetContextOrThrow().CreateInstance(instanceKey, typeName);
+                if (created)
+                {
+                    _hostHook?.Log($"Created instance {instanceKey}: {typeName}");
+                }
+                else
+                {
+                    _hostHook?.Log($"Reusing existing instance {instanceKey}: {typeName}");
+                }
                 return 1;
             }
             catch (Exception ex)

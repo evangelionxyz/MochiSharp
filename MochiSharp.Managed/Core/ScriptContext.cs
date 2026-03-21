@@ -62,8 +62,12 @@ namespace MochiSharp.Managed.Core
 		}
 
 		private readonly string _pluginPath;
+        private readonly string _shadowDirectory;
+		private readonly string _shadowAssemblyPath;
 		private readonly PluginLoadContext _loadContext;
 		private readonly Assembly _pluginAssembly;
+
+		public string PluginPath => _pluginPath;
 
 		private int _nextInstanceId = 1;
 		private readonly Dictionary<int, object> _instances = new();
@@ -113,8 +117,13 @@ namespace MochiSharp.Managed.Core
 				throw new FileNotFoundException("Plugin assembly not found", _pluginPath);
 			}
 
+			_shadowDirectory = Path.Combine(Path.GetTempPath(), "MochiSharp", "shadow", Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(_shadowDirectory);
+			_shadowAssemblyPath = Path.Combine(_shadowDirectory, Path.GetFileName(_pluginPath));
+			File.Copy(_pluginPath, _shadowAssemblyPath, overwrite: true);
+
 			_loadContext = new PluginLoadContext(_pluginPath, typeof(Bootstrap).Assembly);
-			_pluginAssembly = _loadContext.LoadFromAssemblyPath(_pluginPath);
+           _pluginAssembly = _loadContext.LoadFromAssemblyPath(_shadowAssemblyPath);
 		}
 
 		public void Unload()
@@ -124,6 +133,39 @@ namespace MochiSharp.Managed.Core
 			_methods.Clear();
 			_signatures.Clear();
 			_loadContext.Unload();
+
+			try
+			{
+				if (Directory.Exists(_shadowDirectory))
+				{
+					Directory.Delete(_shadowDirectory, recursive: true);
+				}
+			}
+			catch
+			{
+			}
+		}
+
+		public string GetDerivedTypes(string baseTypeFullName)
+		{
+			if (string.IsNullOrWhiteSpace(baseTypeFullName))
+			{
+				return string.Empty;
+			}
+
+			var baseType = Type.GetType(baseTypeFullName, throwOnError: false)
+				?? AppDomain.CurrentDomain.GetAssemblies()
+					.Select(a => a.GetType(baseTypeFullName, throwOnError: false))
+					.FirstOrDefault(t => t != null)
+				?? throw new TypeLoadException($"Base type not found: {baseTypeFullName}");
+
+			var derived = _pluginAssembly.GetTypes()
+				.Where(t => t.IsClass && !t.IsAbstract && baseType.IsAssignableFrom(t))
+				.Select(t => t.FullName)
+				.Where(n => !string.IsNullOrEmpty(n))
+				.ToArray();
+
+			return string.Join("|", derived);
 		}
 
 		public void RegisterSignature(int signatureId, string returnTypeName, string[] parameterTypeNames)
@@ -149,16 +191,21 @@ namespace MochiSharp.Managed.Core
 			return id;
 		}
 
-        public void CreateInstance(string instanceId, string typeName)
+        public bool CreateInstance(string instanceId, string typeName)
 		{
            if (string.IsNullOrWhiteSpace(instanceId))
 			{
 				throw new ArgumentException("Instance id is required", nameof(instanceId));
 			}
 
-			if (_instancesByGuid.ContainsKey(instanceId))
+           if (_instancesByGuid.TryGetValue(instanceId, out var existingInstance))
 			{
-             throw new InvalidOperationException($"Instance id already exists: {instanceId}");
+              if (!string.Equals(existingInstance.GetType().FullName, typeName, StringComparison.Ordinal))
+				{
+					throw new InvalidOperationException($"Instance id {instanceId} already exists with type {existingInstance.GetType().FullName}, requested {typeName}");
+				}
+
+				return false;
 			}
 
 			Type type = ResolvePluginType(typeName);
@@ -166,6 +213,7 @@ namespace MochiSharp.Managed.Core
 				?? throw new InvalidOperationException($"Failed to create instance of {type.FullName}");
 
 			_instancesByGuid.Add(instanceId, instance);
+           return true;
 		}
 
 		public void DestroyInstance(int instanceId)
@@ -197,10 +245,21 @@ namespace MochiSharp.Managed.Core
 				throw new KeyNotFoundException($"Instance id not found: {instanceId}");
 			}
 
-			Signature sig = GetSignature(signatureId);
 			var type = instance.GetType();
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
-			EnsureReturnType(method, sig.ReturnType);
+
+			MethodInfo method;
+			Signature sig;
+			if (_signatures.TryGetValue(signatureId, out var registeredSig))
+			{
+				sig = registeredSig;
+				method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
+				EnsureReturnType(method, sig.ReturnType);
+			}
+			else
+			{
+				method = FindMethodByName(type, methodName, isStatic: false);
+				sig = new Signature(method.ReturnType, method.GetParameters().Select(p => p.ParameterType).ToArray());
+			}
 
 			int id = _nextMethodId++;
 			_methods.Add(id, new MethodBinding(instance, method, sig));
@@ -214,10 +273,21 @@ namespace MochiSharp.Managed.Core
                throw new KeyNotFoundException($"Instance id not found: {instanceId}");
 			}
 
-			Signature sig = GetSignature(signatureId);
 			var type = instance.GetType();
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
-			EnsureReturnType(method, sig.ReturnType);
+
+			MethodInfo method;
+			Signature sig;
+			if (_signatures.TryGetValue(signatureId, out var registeredSig))
+			{
+				sig = registeredSig;
+				method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
+				EnsureReturnType(method, sig.ReturnType);
+			}
+			else
+			{
+				method = FindMethodByName(type, methodName, isStatic: false);
+				sig = new Signature(method.ReturnType, method.GetParameters().Select(p => p.ParameterType).ToArray());
+			}
 
 			int id = _nextMethodId++;
 			_methods.Add(id, new MethodBinding(instance, method, sig));
@@ -227,9 +297,20 @@ namespace MochiSharp.Managed.Core
 		public int BindStaticMethod(string typeName, string methodName, int signatureId)
 		{
 			Type type = ResolvePluginType(typeName);
-			Signature sig = GetSignature(signatureId);
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: true);
-			EnsureReturnType(method, sig.ReturnType);
+
+			MethodInfo method;
+			Signature sig;
+			if (_signatures.TryGetValue(signatureId, out var registeredSig))
+			{
+				sig = registeredSig;
+				method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: true);
+				EnsureReturnType(method, sig.ReturnType);
+			}
+			else
+			{
+				method = FindMethodByName(type, methodName, isStatic: true);
+				sig = new Signature(method.ReturnType, method.GetParameters().Select(p => p.ParameterType).ToArray());
+			}
 
 			int id = _nextMethodId++;
 			_methods.Add(id, new MethodBinding(null, method, sig));
@@ -321,6 +402,26 @@ namespace MochiSharp.Managed.Core
 			throw new MissingMethodException($"Method not found: {type.FullName}.{methodName}({string.Join(",", parameterTypes.Select(t => t.FullName))})");
 		}
 
+		private static MethodInfo FindMethodByName(Type type, string methodName, bool isStatic)
+		{
+			BindingFlags flags = (isStatic ? BindingFlags.Static : BindingFlags.Instance) | BindingFlags.Public | BindingFlags.NonPublic;
+			var matches = type.GetMethods(flags)
+				.Where(m => string.Equals(m.Name, methodName, StringComparison.Ordinal))
+				.ToArray();
+
+			if (matches.Length == 0)
+			{
+				throw new MissingMethodException($"Method not found: {type.FullName}.{methodName}");
+			}
+
+			if (matches.Length > 1)
+			{
+				throw new InvalidOperationException($"Multiple overloads found for {type.FullName}.{methodName}. Register and use explicit signature id.");
+			}
+
+			return matches[0];
+		}
+
 		private Type ResolvePluginType(string typeName)
 		{
 			// Prefer plugin assembly resolution so scripts stay in the collectible context.
@@ -332,6 +433,57 @@ namespace MochiSharp.Managed.Core
 
 			// Fallback: try loaded assemblies in the plugin ALC.
 			foreach (var asm in _loadContext.Assemblies)
+			{
+				t = asm.GetType(typeName, throwOnError: false, ignoreCase: false);
+				if (t != null)
+				{
+					return t;
+				}
+			}
+
+			// Try referenced assemblies (e.g., IgniteScriptEngine from app assembly references).
+			string pluginDir = Path.GetDirectoryName(_pluginPath) ?? string.Empty;
+			foreach (var reference in _pluginAssembly.GetReferencedAssemblies())
+			{
+				Assembly? referencedAssembly = AppDomain.CurrentDomain.GetAssemblies()
+					.FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase));
+
+				if (referencedAssembly == null)
+				{
+					try
+					{
+						referencedAssembly = Assembly.Load(reference);
+					}
+					catch
+					{
+						string candidate = Path.Combine(pluginDir, $"{reference.Name}.dll");
+						if (File.Exists(candidate))
+						{
+							try
+							{
+								referencedAssembly = Assembly.LoadFrom(candidate);
+							}
+							catch
+							{
+							}
+						}
+					}
+				}
+
+				if (referencedAssembly == null)
+				{
+					continue;
+				}
+
+				t = referencedAssembly.GetType(typeName, throwOnError: false, ignoreCase: false);
+				if (t != null)
+				{
+					return t;
+				}
+			}
+
+			// Try all currently loaded assemblies.
+			foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
 			{
 				t = asm.GetType(typeName, throwOnError: false, ignoreCase: false);
 				if (t != null)
