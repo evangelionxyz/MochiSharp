@@ -42,6 +42,7 @@ namespace MochiSharp
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindInstanceMethodGuidFn)(const char *instanceGuid, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindStaticMethodFn)(const char *typeName, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *InvokeFn)(int methodId, const void *argsPtr, int argCount, void *returnPtr);
+    typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetDerivedTypesFn)(const char *asmPath, const char *baseType);
 
     struct HostSettings
     {
@@ -63,6 +64,7 @@ namespace MochiSharp
         BindInstanceMethodGuidFn ManagedBindInstanceMethodGuid = nullptr;
         BindStaticMethodFn ManagedBindStaticMethod = nullptr;
         InvokeFn ManagedInvoke = nullptr;
+        GetDerivedTypesFn ManagedGetDerivedTypes = nullptr;
 
     public:
         static void EngineLog(const char *msg);
@@ -77,7 +79,7 @@ namespace MochiSharp
         int BindInstanceMethodGuid(const char *instanceGuid, const char *methodName, int signature);
         int BindStaticMethod(const char *typeName, const char *methodName, int signature);
         bool Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr);
-
+        std::string GetDerivedTypes(const char *asmPath, const char *baseType);
     private:
         bool LoadHostFxr();
     };

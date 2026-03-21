@@ -1,4 +1,7 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
@@ -32,6 +35,75 @@ namespace MochiSharp.Managed.Core
                 _hostHook?.Log($"Failed to load script assembly: {ex}");
                 return 0;
             }
+        }
+
+        private static string GetDerivedTypesCore(string asmPath, string baseTypeFullName)
+        {
+            try
+            {
+                var asm = Assembly.LoadFrom(asmPath);
+
+                string asmDir = Path.GetDirectoryName(asm.Location) ?? string.Empty;
+                foreach (var reference in asm.GetReferencedAssemblies())
+                {
+                    _ = AppDomain.CurrentDomain.GetAssemblies()
+                        .FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase))
+                        ?? TryLoadReference(reference, asmDir);
+                }
+
+                var baseType = Type.GetType(baseTypeFullName, throwOnError: false)
+                    ?? AppDomain.CurrentDomain.GetAssemblies()
+                        .Select(a => a.GetType(baseTypeFullName, throwOnError: false))
+                        .FirstOrDefault(t => t != null)
+                    ?? throw new Exception($"Base type not found: {baseTypeFullName}");
+
+                var derived = asm.GetTypes()
+                    .Where(t => t.IsClass && !t.IsAbstract && baseType.IsAssignableFrom(t))
+                    .Select(t => t.FullName)
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToArray();
+
+                return string.Join("|", derived);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetDerivedTypes failed for {asmPath}: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        private static Assembly? TryLoadReference(AssemblyName reference, string asmDir)
+        {
+            try
+            {
+                return Assembly.Load(reference);
+            }
+            catch
+            {
+                try
+                {
+                    string candidate = Path.Combine(asmDir, $"{reference.Name}.dll");
+                    if (File.Exists(candidate))
+                    {
+                        return Assembly.LoadFrom(candidate);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetDerivedTypes(IntPtr asmPathPtr, IntPtr baseTypeFullNamePtr)
+        {
+            string asmPath = Marshal.PtrToStringUTF8(asmPathPtr) ?? string.Empty;
+            string baseTypeFullName = Marshal.PtrToStringUTF8(baseTypeFullNamePtr) ?? string.Empty;
+
+            string result = GetDerivedTypesCore(asmPath, baseTypeFullName);
+            return Marshal.StringToCoTaskMemUTF8(result);
         }
 
         private static ScriptContext GetContextOrThrow()
@@ -90,7 +162,7 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        // Create a script instance with a caller-supplied GUID key.
+        // Create a script instance with a caller-supplied instance key.
         // Returns 1 on success, 0 on error.
         [UnmanagedCallersOnly]
         public static int CreateInstanceGuid(IntPtr typeNamePtr, IntPtr instanceGuidPtr)
@@ -98,11 +170,10 @@ namespace MochiSharp.Managed.Core
             try
             {
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
 
-                GetContextOrThrow().CreateInstance(instanceGuid, typeName);
-                _hostHook?.Log($"Created instance {instanceGuid}: {typeName}");
+                GetContextOrThrow().CreateInstance(instanceKey, typeName);
+                _hostHook?.Log($"Created instance {instanceKey}: {typeName}");
                 return 1;
             }
             catch (Exception ex)
@@ -130,9 +201,8 @@ namespace MochiSharp.Managed.Core
         {
             try
             {
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
-                GetContextOrThrow().DestroyInstance(instanceGuid);
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
+                GetContextOrThrow().DestroyInstance(instanceKey);
             }
             catch (Exception ex)
             {
@@ -158,18 +228,17 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        // Bind an instance method using a caller-supplied GUID instance key.
+        // Bind an instance method using a caller-supplied instance key.
         [UnmanagedCallersOnly]
         public static int BindInstanceMethodGuid(IntPtr instanceGuidPtr, IntPtr methodNamePtr, int signature)
         {
             try
             {
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
                 string methodName = Marshal.PtrToStringUTF8(methodNamePtr)!;
 
-                int id = GetContextOrThrow().BindInstanceMethod(instanceGuid, methodName, signature);
-                _hostHook?.Log($"Bound instance method {id}: instance {instanceGuid}.{methodName} (sig={signature})");
+                int id = GetContextOrThrow().BindInstanceMethod(instanceKey, methodName, signature);
+                _hostHook?.Log($"Bound instance method {id}: instance {instanceKey}.{methodName} (sig={signature})");
                 return id;
             }
             catch (Exception ex)
@@ -247,6 +316,7 @@ namespace MochiSharp.Managed.Core
                 return 0;
             }
         }
+
 
         // Back-compat: previous API used by older native hosts.
         [UnmanagedCallersOnly]

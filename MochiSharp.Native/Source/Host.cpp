@@ -4,6 +4,9 @@
 #include <iostream>
 #include <iomanip>
 #include <assert.h>
+#ifdef _WIN32
+#include <combaseapi.h>
+#endif
 
 #define STR(s) L ## s
 #define CH(c) L ## c
@@ -266,6 +269,19 @@ namespace MochiSharp
             return false;
         }
 
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("GetDerivedTypes"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedGetDerivedTypes);
+
+        if (rc != 0 || ManagedGetDerivedTypes == nullptr)
+        {
+            std::cout << "[C++ Engine] Failed to load GetDerivedTypes function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+        }
+
         // Call Initialize
         EngineInterface api;
         api.LogMessage = &EngineLog;
@@ -377,7 +393,27 @@ namespace MochiSharp
         return ManagedInvoke(methodId, argsPtr, argCount, returnPtr) != 0;
     }
 
-    bool DotNetHost::LoadHostFxr()
+    std::string DotNetHost::GetDerivedTypes(const char *asmPath, const char *baseType)
+	{
+        if (!ManagedGetDerivedTypes)
+        {
+            return {};
+        }
+
+        const char *result = ManagedGetDerivedTypes(asmPath, baseType);
+        if (!result)
+        {
+            return {};
+        }
+
+        std::string managedResult(result);
+#ifdef _WIN32
+        CoTaskMemFree((LPVOID)result);
+#endif
+        return managedResult;
+	}
+
+	bool DotNetHost::LoadHostFxr()
     {
         char_t buffer[MAX_PATH];
         size_t bufferSize = sizeof(buffer) / sizeof(buffer[0]);
