@@ -11,3 +11,4 @@ bin-int/
 *.slnx
 *.sln
 *.user
+MochiSharp.Managed/Directory.Build.props

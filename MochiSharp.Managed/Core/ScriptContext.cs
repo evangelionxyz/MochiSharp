@@ -22,7 +22,7 @@ namespace MochiSharp.Managed.Core
 				_coreAssembly = coreAssembly;
 			}
 
-			protected override Assembly Load(AssemblyName assemblyName)
+			protected override Assembly? Load(AssemblyName assemblyName)
 			{
 				// Ensure the core is always shared from the default context to avoid type identity issues.
 				if (string.Equals(assemblyName.Name, _coreAssembly.GetName().Name, StringComparison.OrdinalIgnoreCase))
@@ -30,7 +30,7 @@ namespace MochiSharp.Managed.Core
 					return _coreAssembly;
 				}
 
-				string assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+				string assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName)!;
 				if (assemblyPath == null)
 				{
 					return null;
@@ -51,7 +51,7 @@ namespace MochiSharp.Managed.Core
 
 			protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
 			{
-				string libraryPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+				string? libraryPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
 				if (libraryPath == null)
 				{
 					return IntPtr.Zero;
@@ -260,7 +260,7 @@ namespace MochiSharp.Managed.Core
 			}
 
 			int id = _nextMethodId++;
-			_methods.Add(id, new MethodBinding(null, method, sig));
+			_methods.Add(id, new MethodBinding(null!, method, sig));
 			return id;
 		}
 
@@ -284,8 +284,8 @@ namespace MochiSharp.Managed.Core
 				args[i] = ReadValueFromPointer(sig.ParameterTypes[i], argValuePtr);
 			}
 
-			object result = binding.Method.Invoke(binding.Target, args);
-			WriteReturnValueToPointer(sig.ReturnType, result, returnPtr);
+			object? result = binding.Method.Invoke(binding.Target, args);
+			WriteReturnValueToPointer(sig.ReturnType, result!, returnPtr);
 		}
 
 		private static void EnsureReturnType(MethodInfo method, Type expectedReturnType)
@@ -382,7 +382,7 @@ namespace MochiSharp.Managed.Core
 			string pluginDir = Path.GetDirectoryName(_pluginPath) ?? string.Empty;
 			foreach (var reference in _pluginAssembly.GetReferencedAssemblies())
 			{
-				Assembly referencedAssembly = AppDomain.CurrentDomain.GetAssemblies()
+				Assembly? referencedAssembly = AppDomain.CurrentDomain.GetAssemblies()
 					.FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase));
 
 				if (referencedAssembly == null)
@@ -455,7 +455,7 @@ namespace MochiSharp.Managed.Core
 			}
 
 			string fullName = n;
-			string assemblyPart = null;
+			string? assemblyPart = null;
 			int commaIndex = n.IndexOf(',');
 			if (commaIndex >= 0)
 			{
@@ -485,7 +485,7 @@ namespace MochiSharp.Managed.Core
 				return typeof(bool);
 			}
 
-			Type t = null;
+			Type? t = null;
 
 			// Try standard resolution first.
 			t = Type.GetType(typeName.Trim(), throwOnError: false);

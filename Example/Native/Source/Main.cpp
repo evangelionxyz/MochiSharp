@@ -24,7 +24,7 @@ namespace ExampleInterop
     };
 }
 
-enum ScriptMethodSignature : int
+enum ScriptMethodSig : int
 {
     Void = 0,
     Void_Float = 1,
@@ -40,29 +40,29 @@ enum ScriptMethodSignature : int
 struct ScriptInstance
 {
     MochiSharp::DotNetHost* Host;
-    std::string Guid;
+    uint64_t InstanceId = 0;
     int OnAwake = 0;
     int OnStart = 0;
     int OnUpdate = 0;
     int SetTransform = 0;
     int GetTransform = 0;
 
-    void Init(MochiSharp::DotNetHost* host, const char* guid, const char* typeName)
+    void Init(MochiSharp::DotNetHost* host, uint64_t instanceId, const char* typeName)
     {
         Host = host;
-        Guid = guid;
-        if (Host->CreateInstanceGuid(typeName, Guid.c_str()))
+        InstanceId = instanceId;
+        if (Host->CreateInstance(typeName, instanceId))
         {
-            std::println("[C++] Created instance {} of type {}", Guid, typeName);
-            OnAwake = Host->BindInstanceMethodGuid(Guid.c_str(), "OnAwake", ScriptMethodSignature::Void);
-            OnStart = Host->BindInstanceMethodGuid(Guid.c_str(), "OnStart", ScriptMethodSignature::Void);
-            OnUpdate = Host->BindInstanceMethodGuid(Guid.c_str(), "OnUpdate", ScriptMethodSignature::Void_Float);
-            SetTransform = Host->BindInstanceMethodGuid(Guid.c_str(), "SetTransform", ScriptMethodSignature::Void_Transform);
-            GetTransform = Host->BindInstanceMethodGuid(Guid.c_str(), "GetTransform", ScriptMethodSignature::Transform);
+            std::println("[C++] Created instance {} of type {}", instanceId, typeName);
+            OnAwake = Host->BindInstanceMethod(instanceId, "OnAwake", ScriptMethodSig::Void);
+            OnStart = Host->BindInstanceMethod(instanceId, "OnStart", ScriptMethodSig::Void);
+            OnUpdate = Host->BindInstanceMethod(instanceId, "OnUpdate", ScriptMethodSig::Void_Float);
+            SetTransform = Host->BindInstanceMethod(instanceId, "SetTransform", ScriptMethodSig::Void_Transform);
+            GetTransform = Host->BindInstanceMethod(instanceId, "GetTransform", ScriptMethodSig::Transform);
         }
         else
         {
-            std::println("[C++] Failed to create instance {}", Guid);
+            std::println("[C++] Failed to create instance {}", InstanceId);
         }
     }
 
@@ -110,39 +110,39 @@ int main(int argc, char *argv[])
     const char *transformType = "Example.Managed.Interop.Transform, Example.Managed";
 
     {
-        host.RegisterSignature(ScriptMethodSignature::Void, "System.Void", nullptr, 0);
+        host.RegisterSignature(ScriptMethodSig::Void, "System.Void", nullptr, 0);
     }
 
     {
         const char *p1[] = { "System.Single" };
-        host.RegisterSignature(ScriptMethodSignature::Void_Float, "System.Void", p1, 1);
+        host.RegisterSignature(ScriptMethodSig::Void_Float, "System.Void", p1, 1);
     }
 
     {
         const char *p2[] = { "System.Int32", "System.Int32" };
-        host.RegisterSignature(ScriptMethodSignature::Int_IntInt, "System.Int32", p2, 2);
+        host.RegisterSignature(ScriptMethodSig::Int_IntInt, "System.Int32", p2, 2);
     }
 
     {
         const char *p2[] = { vector3Type, vector3Type };
-        host.RegisterSignature(ScriptMethodSignature::Vector3_Vector3Vector3, vector3Type, p2, 2);
+        host.RegisterSignature(ScriptMethodSig::Vector3_Vector3Vector3, vector3Type, p2, 2);
     }
 
     {
         const char *p1[] = { transformType };
-        host.RegisterSignature(ScriptMethodSignature::Void_Transform, "System.Void", p1, 1);
+        host.RegisterSignature(ScriptMethodSig::Void_Transform, "System.Void", p1, 1);
     }
 
     {
-        host.RegisterSignature(ScriptMethodSignature::Transform, transformType, nullptr, 0);
+        host.RegisterSignature(ScriptMethodSig::Transform, transformType, nullptr, 0);
     }
 
     // Create multiple script instances
     ScriptInstance player1;
-    player1.Init(&host, "c3f5a1b7-1c21-4f5f-9e3a-7a9a2bf6b7d1", "Example.Managed.Scripts.Player");
+    player1.Init(&host, 1, "Example.Managed.Scripts.Player");
 
     ScriptInstance player2;
-    player2.Init(&host, "d4f6b2c8-2d32-5e6f-af4b-8b0b3cf7c8e2", "Example.Managed.Scripts.Player");
+    player2.Init(&host, 2, "Example.Managed.Scripts.Player");
 
     player1.Awake();
     player2.Awake();

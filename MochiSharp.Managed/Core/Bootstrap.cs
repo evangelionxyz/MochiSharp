@@ -9,8 +9,8 @@ namespace MochiSharp.Managed.Core
 {
     public static class Bootstrap
     {
-        private static HostHook _hostHook;
-        private static ScriptContext _scriptContext;
+        private static HostHook? _hostHook;
+        private static ScriptContext? _scriptContext;
 
         private static int LoadAssemblyCore(string path)
         {
@@ -78,7 +78,7 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        private static Assembly TryLoadReference(AssemblyName reference, string asmDir)
+        private static Assembly? TryLoadReference(AssemblyName reference, string asmDir)
         {
             try
             {
