@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <BaseOutputPath>../../../bin\\</BaseOutputPath>
+    <IntermediateOutputPath>../../../bin\\objs\\$(Configuration)\\$(MSBuildProjectName)\\</IntermediateOutputPath>
+  </PropertyGroup>
+</Project>

@@ -65,7 +65,6 @@ namespace MochiSharp
         bool Init(const std::wstring &configPath);
         bool LoadAssembly(const char *path);
         bool RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
-        int CreateInstance(const char *typeName);
 		bool CreateInstance(const char *typeName, uint64_t instanceId);
         void DestroyInstance(uint64_t instanceId);
         int BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature);
