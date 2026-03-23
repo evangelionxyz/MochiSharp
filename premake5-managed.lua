@@ -1,5 +1,5 @@
 workspace "MochiSharp-Managed"
-    flags { "MultiProcessorCompile" }
+    multiprocessorcompile("On")
     configurations { "Debug", "Release" }
 
     startproject "Example.Managed"

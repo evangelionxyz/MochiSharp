@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
   pull_request:
     branches: [master]
 
@@ -16,7 +16,7 @@ jobs:
     env:
       SLN_FILE_NATIVE: MochiSharp.sln
       SLN_FILE_MANAGED: MochiSharp-Managed.sln
-      PREMAKE_VERSION: 5.0.0-beta7
+      PREMAKE_VERSION: 5.0.0-beta8
 
     steps:
       - name: Checkout repository (with submodules)
