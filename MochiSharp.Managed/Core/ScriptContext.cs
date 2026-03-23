@@ -30,7 +30,7 @@ namespace MochiSharp.Managed.Core
 					return _coreAssembly;
 				}
 
-				string? assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+				string assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName)!;
 				if (assemblyPath == null)
 				{
 					return null;
@@ -62,12 +62,14 @@ namespace MochiSharp.Managed.Core
 		}
 
 		private readonly string _pluginPath;
+		private readonly string _shadowDirectory;
+		private readonly string _shadowAssemblyPath;
 		private readonly PluginLoadContext _loadContext;
 		private readonly Assembly _pluginAssembly;
 
-		private int _nextInstanceId = 1;
-		private readonly Dictionary<int, object> _instances = new();
-		private readonly Dictionary<Guid, object> _instancesByGuid = new();
+		public string PluginPath => _pluginPath;
+
+		private readonly Dictionary<ulong, object> _instances = new();
 
 		private int _nextMethodId = 1;
 		private readonly Dictionary<int, MethodBinding> _methods = new();
@@ -88,11 +90,11 @@ namespace MochiSharp.Managed.Core
 
 		private readonly struct MethodBinding
 		{
-			public readonly object? Target;
+			public readonly object Target;
 			public readonly MethodInfo Method;
 			public readonly Signature Signature;
 
-			public MethodBinding(object? target, MethodInfo method, Signature signature)
+			public MethodBinding(object target, MethodInfo method, Signature signature)
 			{
 				Target = target;
 				Method = method;
@@ -113,24 +115,61 @@ namespace MochiSharp.Managed.Core
 				throw new FileNotFoundException("Plugin assembly not found", _pluginPath);
 			}
 
+			_shadowDirectory = Path.Combine(Path.GetTempPath(), "MochiSharp", "shadow", Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(_shadowDirectory);
+			_shadowAssemblyPath = Path.Combine(_shadowDirectory, Path.GetFileName(_pluginPath));
+			File.Copy(_pluginPath, _shadowAssemblyPath, overwrite: true);
+
 			_loadContext = new PluginLoadContext(_pluginPath, typeof(Bootstrap).Assembly);
-			_pluginAssembly = _loadContext.LoadFromAssemblyPath(_pluginPath);
+			_pluginAssembly = _loadContext.LoadFromAssemblyPath(_shadowAssemblyPath);
 		}
 
 		public void Unload()
 		{
 			_instances.Clear();
-			_instancesByGuid.Clear();
 			_methods.Clear();
 			_signatures.Clear();
 			_loadContext.Unload();
+
+			try
+			{
+				if (Directory.Exists(_shadowDirectory))
+				{
+					Directory.Delete(_shadowDirectory, recursive: true);
+				}
+			}
+			catch
+			{
+			}
+		}
+
+		public string GetDerivedTypes(string baseTypeFullName)
+		{
+			if (string.IsNullOrWhiteSpace(baseTypeFullName))
+			{
+				return string.Empty;
+			}
+
+			var baseType = Type.GetType(baseTypeFullName, throwOnError: false)
+				?? AppDomain.CurrentDomain.GetAssemblies()
+					.Select(a => a.GetType(baseTypeFullName, throwOnError: false))
+					.FirstOrDefault(t => t != null)
+				?? throw new TypeLoadException($"Base type not found: {baseTypeFullName}");
+
+			var derived = _pluginAssembly.GetTypes()
+				.Where(t => t.IsClass && !t.IsAbstract && baseType.IsAssignableFrom(t))
+				.Select(t => t.FullName)
+				.Where(n => !string.IsNullOrEmpty(n))
+				.ToArray();
+
+			return string.Join("|", derived);
 		}
 
 		public void RegisterSignature(int signatureId, string returnTypeName, string[] parameterTypeNames)
 		{
-            ArgumentOutOfRangeException.ThrowIfNegative(signatureId);
+			ArgumentOutOfRangeException.ThrowIfNegative(signatureId);
 
-            Type returnType = ResolveType(returnTypeName);
+			Type returnType = ResolveType(returnTypeName);
 			var paramTypes = parameterTypeNames.Length == 0
 				? Array.Empty<Type>()
 				: parameterTypeNames.Select(ResolveType).ToArray();
@@ -138,32 +177,32 @@ namespace MochiSharp.Managed.Core
 			_signatures[signatureId] = new Signature(returnType, paramTypes);
 		}
 
-		public int CreateInstance(string typeName)
+		public bool CreateInstance(ulong instanceId, string typeName)
 		{
-			Type type = ResolvePluginType(typeName);
-			object instance = Activator.CreateInstance(type)
-				?? throw new InvalidOperationException($"Failed to create instance of {type.FullName}");
-
-			int id = _nextInstanceId++;
-			_instances.Add(id, instance);
-			return id;
-		}
-
-		public void CreateInstance(Guid instanceId, string typeName)
-		{
-			if (_instancesByGuid.ContainsKey(instanceId))
+			if (instanceId == 0)
 			{
-				throw new InvalidOperationException($"Instance GUID already exists: {instanceId}");
+				throw new ArgumentException("Instance id is required", nameof(instanceId));
+			}
+
+			if (_instances.TryGetValue(instanceId, out var existingInstance))
+			{
+				if (!string.Equals(existingInstance.GetType().FullName, typeName, StringComparison.Ordinal))
+				{
+					throw new InvalidOperationException($"Instance id {instanceId} already exists with type {existingInstance.GetType().FullName}, requested {typeName}");
+				}
+
+				return false;
 			}
 
 			Type type = ResolvePluginType(typeName);
 			object instance = Activator.CreateInstance(type)
 				?? throw new InvalidOperationException($"Failed to create instance of {type.FullName}");
 
-			_instancesByGuid.Add(instanceId, instance);
+			_instances.Add(instanceId, instance);
+			return true;
 		}
 
-		public void DestroyInstance(int instanceId)
+		public void DestroyInstance(ulong instanceId)
 		{
 			if (_instances.Remove(instanceId, out var obj))
 			{
@@ -174,45 +213,28 @@ namespace MochiSharp.Managed.Core
 			}
 		}
 
-		public void DestroyInstance(Guid instanceId)
-		{
-			if (_instancesByGuid.Remove(instanceId, out var obj))
-			{
-				if (obj is IDisposable d)
-				{
-					d.Dispose();
-				}
-			}
-		}
-
-		public int BindInstanceMethod(int instanceId, string methodName, int signatureId)
+		public int BindInstanceMethod(ulong instanceId, string methodName, int signatureId)
 		{
 			if (!_instances.TryGetValue(instanceId, out var instance))
 			{
 				throw new KeyNotFoundException($"Instance id not found: {instanceId}");
 			}
 
-			Signature sig = GetSignature(signatureId);
 			var type = instance.GetType();
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
-			EnsureReturnType(method, sig.ReturnType);
 
-			int id = _nextMethodId++;
-			_methods.Add(id, new MethodBinding(instance, method, sig));
-			return id;
-		}
-
-		public int BindInstanceMethod(Guid instanceId, string methodName, int signatureId)
-		{
-			if (!_instancesByGuid.TryGetValue(instanceId, out var instance))
+			MethodInfo method;
+			Signature sig;
+			if (_signatures.TryGetValue(signatureId, out var registeredSig))
 			{
-				throw new KeyNotFoundException($"Instance guid not found: {instanceId}");
+				sig = registeredSig;
+				method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
+				EnsureReturnType(method, sig.ReturnType);
 			}
-
-			Signature sig = GetSignature(signatureId);
-			var type = instance.GetType();
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: false);
-			EnsureReturnType(method, sig.ReturnType);
+			else
+			{
+				method = FindMethodByName(type, methodName, isStatic: false);
+				sig = new Signature(method.ReturnType, method.GetParameters().Select(p => p.ParameterType).ToArray());
+			}
 
 			int id = _nextMethodId++;
 			_methods.Add(id, new MethodBinding(instance, method, sig));
@@ -222,12 +244,23 @@ namespace MochiSharp.Managed.Core
 		public int BindStaticMethod(string typeName, string methodName, int signatureId)
 		{
 			Type type = ResolvePluginType(typeName);
-			Signature sig = GetSignature(signatureId);
-			var method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: true);
-			EnsureReturnType(method, sig.ReturnType);
+
+			MethodInfo method;
+			Signature sig;
+			if (_signatures.TryGetValue(signatureId, out var registeredSig))
+			{
+				sig = registeredSig;
+				method = FindMethod(type, methodName, sig.ParameterTypes, isStatic: true);
+				EnsureReturnType(method, sig.ReturnType);
+			}
+			else
+			{
+				method = FindMethodByName(type, methodName, isStatic: true);
+				sig = new Signature(method.ReturnType, method.GetParameters().Select(p => p.ParameterType).ToArray());
+			}
 
 			int id = _nextMethodId++;
-			_methods.Add(id, new MethodBinding(null, method, sig));
+			_methods.Add(id, new MethodBinding(null!, method, sig));
 			return id;
 		}
 
@@ -244,7 +277,7 @@ namespace MochiSharp.Managed.Core
 				throw new ArgumentException($"Argument count mismatch. Expected {sig.ParameterTypes.Length}, got {argCount}");
 			}
 
-			object?[] args = argCount == 0 ? Array.Empty<object?>() : new object?[argCount];
+			object[] args = argCount == 0 ? Array.Empty<object>() : new object[argCount];
 			for (int i = 0; i < argCount; i++)
 			{
 				IntPtr argValuePtr = Marshal.ReadIntPtr(argsPtr, i * IntPtr.Size);
@@ -252,17 +285,7 @@ namespace MochiSharp.Managed.Core
 			}
 
 			object? result = binding.Method.Invoke(binding.Target, args);
-			WriteReturnValueToPointer(sig.ReturnType, result, returnPtr);
-		}
-
-		private Signature GetSignature(int signatureId)
-		{
-			if (!_signatures.TryGetValue(signatureId, out var sig))
-			{
-				throw new InvalidOperationException($"Signature not registered: {signatureId}");
-			}
-
-			return sig;
+			WriteReturnValueToPointer(sig.ReturnType, result!, returnPtr);
 		}
 
 		private static void EnsureReturnType(MethodInfo method, Type expectedReturnType)
@@ -316,6 +339,26 @@ namespace MochiSharp.Managed.Core
 			throw new MissingMethodException($"Method not found: {type.FullName}.{methodName}({string.Join(",", parameterTypes.Select(t => t.FullName))})");
 		}
 
+		private static MethodInfo FindMethodByName(Type type, string methodName, bool isStatic)
+		{
+			BindingFlags flags = (isStatic ? BindingFlags.Static : BindingFlags.Instance) | BindingFlags.Public | BindingFlags.NonPublic;
+			var matches = type.GetMethods(flags)
+				.Where(m => string.Equals(m.Name, methodName, StringComparison.Ordinal))
+				.ToArray();
+
+			if (matches.Length == 0)
+			{
+				throw new MissingMethodException($"Method not found: {type.FullName}.{methodName}");
+			}
+
+			if (matches.Length > 1)
+			{
+				throw new InvalidOperationException($"Multiple overloads found for {type.FullName}.{methodName}. Register and use explicit signature id.");
+			}
+
+			return matches[0];
+		}
+
 		private Type ResolvePluginType(string typeName)
 		{
 			// Prefer plugin assembly resolution so scripts stay in the collectible context.
@@ -327,6 +370,57 @@ namespace MochiSharp.Managed.Core
 
 			// Fallback: try loaded assemblies in the plugin ALC.
 			foreach (var asm in _loadContext.Assemblies)
+			{
+				t = asm.GetType(typeName, throwOnError: false, ignoreCase: false);
+				if (t != null)
+				{
+					return t;
+				}
+			}
+
+			// Try referenced assemblies (e.g., IgniteScriptEngine from app assembly references).
+			string pluginDir = Path.GetDirectoryName(_pluginPath) ?? string.Empty;
+			foreach (var reference in _pluginAssembly.GetReferencedAssemblies())
+			{
+				Assembly? referencedAssembly = AppDomain.CurrentDomain.GetAssemblies()
+					.FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase));
+
+				if (referencedAssembly == null)
+				{
+					try
+					{
+						referencedAssembly = Assembly.Load(reference);
+					}
+					catch
+					{
+						string candidate = Path.Combine(pluginDir, $"{reference.Name}.dll");
+						if (File.Exists(candidate))
+						{
+							try
+							{
+								referencedAssembly = Assembly.LoadFrom(candidate);
+							}
+							catch
+							{
+							}
+						}
+					}
+				}
+
+				if (referencedAssembly == null)
+				{
+					continue;
+				}
+
+				t = referencedAssembly.GetType(typeName, throwOnError: false, ignoreCase: false);
+				if (t != null)
+				{
+					return t;
+				}
+			}
+
+			// Try all currently loaded assemblies.
+			foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
 			{
 				t = asm.GetType(typeName, throwOnError: false, ignoreCase: false);
 				if (t != null)
@@ -353,6 +447,27 @@ namespace MochiSharp.Managed.Core
 			}
 
 			string n = typeName.Trim();
+			bool isByRef = false;
+			if (n.EndsWith("&", StringComparison.Ordinal))
+			{
+				isByRef = true;
+				n = n[..^1].Trim();
+			}
+
+			string fullName = n;
+			string? assemblyPart = null;
+			int commaIndex = n.IndexOf(',');
+			if (commaIndex >= 0)
+			{
+				fullName = n[..commaIndex].Trim();
+				assemblyPart = n[(commaIndex + 1)..].Trim();
+				if (fullName.EndsWith("&", StringComparison.Ordinal))
+				{
+					isByRef = true;
+					fullName = fullName[..^1].Trim();
+				}
+			}
+
 			if (string.Equals(n, "void", StringComparison.OrdinalIgnoreCase) || string.Equals(n, typeof(void).FullName, StringComparison.Ordinal))
 			{
 				return typeof(void);
@@ -370,21 +485,68 @@ namespace MochiSharp.Managed.Core
 				return typeof(bool);
 			}
 
+			Type? t = null;
+
 			// Try standard resolution first.
-			Type? t = Type.GetType(n, throwOnError: false);
+			t = Type.GetType(typeName.Trim(), throwOnError: false);
 			if (t != null)
 			{
-				return t;
+				return isByRef && !t.IsByRef ? t.MakeByRefType() : t;
 			}
 
-			// If assembly-qualified, strip the type full name and try in plugin ALC assemblies.
-			string fullName = n.Split(',')[0].Trim();
+			if (!string.IsNullOrWhiteSpace(assemblyPart))
+			{
+				var loadedAsm = AppDomain.CurrentDomain.GetAssemblies()
+					.FirstOrDefault(a => string.Equals(a.GetName().Name, assemblyPart, StringComparison.OrdinalIgnoreCase));
+
+				if (loadedAsm != null)
+				{
+					t = loadedAsm.GetType(fullName, throwOnError: false, ignoreCase: false);
+					if (t != null)
+					{
+						return isByRef ? t.MakeByRefType() : t;
+					}
+				}
+
+				try
+				{
+					var asmName = new AssemblyName(assemblyPart);
+					loadedAsm = Assembly.Load(asmName);
+					t = loadedAsm?.GetType(fullName, throwOnError: false, ignoreCase: false);
+					if (t != null)
+					{
+						return isByRef ? t.MakeByRefType() : t;
+					}
+				}
+				catch
+				{
+				}
+
+				try
+				{
+					string candidate = Path.Combine(Path.GetDirectoryName(_pluginPath) ?? string.Empty, $"{assemblyPart}.dll");
+					if (File.Exists(candidate))
+					{
+						loadedAsm = Assembly.LoadFrom(candidate);
+						t = loadedAsm.GetType(fullName, throwOnError: false, ignoreCase: false);
+						if (t != null)
+						{
+							return isByRef ? t.MakeByRefType() : t;
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
+
+			// Try in plugin ALC assemblies.
 			foreach (var asm in _loadContext.Assemblies)
 			{
 				t = asm.GetType(fullName, throwOnError: false, ignoreCase: false);
 				if (t != null)
 				{
-					return t;
+					return isByRef ? t.MakeByRefType() : t;
 				}
 			}
 
@@ -394,7 +556,7 @@ namespace MochiSharp.Managed.Core
 				t = asm.GetType(fullName, throwOnError: false, ignoreCase: false);
 				if (t != null)
 				{
-					return t;
+					return isByRef ? t.MakeByRefType() : t;
 				}
 			}
 
@@ -426,7 +588,7 @@ namespace MochiSharp.Managed.Core
 			throw new NotSupportedException($"Unsupported parameter type: {type}");
 		}
 
-		private static void WriteReturnValueToPointer(Type returnType, object? result, IntPtr returnPtr)
+		private static void WriteReturnValueToPointer(Type returnType, object result, IntPtr returnPtr)
 		{
 			if (returnType == typeof(void))
 			{

@@ -34,14 +34,12 @@ namespace MochiSharp
     typedef int (CORECLR_DELEGATE_CALLTYPE *InitializeFn)(EngineInterface *engineApi);
     typedef int (CORECLR_DELEGATE_CALLTYPE *LoadAssemblyFn)(const char *path);
     typedef int (CORECLR_DELEGATE_CALLTYPE *RegisterSignatureFn)(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
-    typedef int (CORECLR_DELEGATE_CALLTYPE *CreateInstanceFn)(const char *typeName);
-    typedef int (CORECLR_DELEGATE_CALLTYPE *CreateInstanceGuidFn)(const char *typeName, const char *instanceGuid);
-    typedef void (CORECLR_DELEGATE_CALLTYPE *DestroyInstanceFn)(int instanceId);
-    typedef void (CORECLR_DELEGATE_CALLTYPE *DestroyInstanceGuidFn)(const char *instanceGuid);
-    typedef int (CORECLR_DELEGATE_CALLTYPE *BindInstanceMethodFn)(int instanceId, const char *methodName, int signature);
-    typedef int (CORECLR_DELEGATE_CALLTYPE *BindInstanceMethodGuidFn)(const char *instanceGuid, const char *methodName, int signature);
+    typedef int (CORECLR_DELEGATE_CALLTYPE *CreateInstanceFn)(const char *typeName, uint64_t instanceId);
+    typedef void (CORECLR_DELEGATE_CALLTYPE *DestroyInstanceFn)(uint64_t instanceId);
+    typedef int (CORECLR_DELEGATE_CALLTYPE *BindInstanceMethodFn)(uint64_t instanceId, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindStaticMethodFn)(const char *typeName, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *InvokeFn)(int methodId, const void *argsPtr, int argCount, void *returnPtr);
+    typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetDerivedTypesFn)(const char *asmPath, const char *baseType);
 
     struct HostSettings
     {
@@ -56,28 +54,23 @@ namespace MochiSharp
         LoadAssemblyFn ManagedLoadAssembly = nullptr;
         RegisterSignatureFn ManagedRegisterSignature = nullptr;
         CreateInstanceFn ManagedCreateInstance = nullptr;
-        CreateInstanceGuidFn ManagedCreateInstanceGuid = nullptr;
         DestroyInstanceFn ManagedDestroyInstance = nullptr;
-        DestroyInstanceGuidFn ManagedDestroyInstanceGuid = nullptr;
         BindInstanceMethodFn ManagedBindInstanceMethod = nullptr;
-        BindInstanceMethodGuidFn ManagedBindInstanceMethodGuid = nullptr;
         BindStaticMethodFn ManagedBindStaticMethod = nullptr;
         InvokeFn ManagedInvoke = nullptr;
+        GetDerivedTypesFn ManagedGetDerivedTypes = nullptr;
 
     public:
         static void EngineLog(const char *msg);
         bool Init(const std::wstring &configPath);
         bool LoadAssembly(const char *path);
         bool RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
-        int CreateInstance(const char *typeName);
-        bool CreateInstanceGuid(const char *typeName, const char *instanceGuid);
-        void DestroyInstance(int instanceId);
-        void DestroyInstanceGuid(const char *instanceGuid);
-        int BindInstanceMethod(int instanceId, const char *methodName, int signature);
-        int BindInstanceMethodGuid(const char *instanceGuid, const char *methodName, int signature);
+		bool CreateInstance(const char *typeName, uint64_t instanceId);
+        void DestroyInstance(uint64_t instanceId);
+        int BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature);
         int BindStaticMethod(const char *typeName, const char *methodName, int signature);
         bool Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr);
-
+        std::string GetDerivedTypes(const char *asmPath, const char *baseType);
     private:
         bool LoadHostFxr();
     };

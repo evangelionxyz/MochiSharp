@@ -1,5 +1,5 @@
 workspace "MochiSharp"
-    flags { "MultiProcessorCompile" }
+    multiprocessorcompile("On")
     configurations {"Debug", "Release" }
     architecture "x64"
 

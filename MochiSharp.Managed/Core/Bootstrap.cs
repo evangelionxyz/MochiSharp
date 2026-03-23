@@ -1,4 +1,7 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
@@ -32,6 +35,81 @@ namespace MochiSharp.Managed.Core
                 _hostHook?.Log($"Failed to load script assembly: {ex}");
                 return 0;
             }
+        }
+
+        private static string GetDerivedTypesCore(string asmPath, string baseTypeFullName)
+        {
+            try
+            {
+                string fullPath = Path.GetFullPath(asmPath);
+                if (_scriptContext != null && string.Equals(_scriptContext.PluginPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return _scriptContext.GetDerivedTypes(baseTypeFullName);
+                }
+
+                var asm = Assembly.LoadFrom(asmPath);
+
+                string asmDir = Path.GetDirectoryName(asm.Location) ?? string.Empty;
+                foreach (var reference in asm.GetReferencedAssemblies())
+                {
+                    _ = AppDomain.CurrentDomain.GetAssemblies()
+                        .FirstOrDefault(a => string.Equals(a.GetName().Name, reference.Name, StringComparison.OrdinalIgnoreCase))
+                        ?? TryLoadReference(reference, asmDir);
+                }
+
+                var baseType = Type.GetType(baseTypeFullName, throwOnError: false)
+                    ?? AppDomain.CurrentDomain.GetAssemblies()
+                        .Select(a => a.GetType(baseTypeFullName, throwOnError: false))
+                        .FirstOrDefault(t => t != null)
+                    ?? throw new Exception($"Base type not found: {baseTypeFullName}");
+
+                var derived = asm.GetTypes()
+                    .Where(t => t.IsClass && !t.IsAbstract && baseType.IsAssignableFrom(t))
+                    .Select(t => t.FullName)
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToArray();
+
+                return string.Join("|", derived);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetDerivedTypes failed for {asmPath}: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        private static Assembly? TryLoadReference(AssemblyName reference, string asmDir)
+        {
+            try
+            {
+                return Assembly.Load(reference);
+            }
+            catch
+            {
+                try
+                {
+                    string candidate = Path.Combine(asmDir, $"{reference.Name}.dll");
+                    if (File.Exists(candidate))
+                    {
+                        return Assembly.LoadFrom(candidate);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetDerivedTypes(IntPtr asmPathPtr, IntPtr baseTypeFullNamePtr)
+        {
+            string asmPath = Marshal.PtrToStringUTF8(asmPathPtr) ?? string.Empty;
+            string baseTypeFullName = Marshal.PtrToStringUTF8(baseTypeFullNamePtr) ?? string.Empty;
+
+            string result = GetDerivedTypesCore(asmPath, baseTypeFullName);
+            return Marshal.StringToCoTaskMemUTF8(result);
         }
 
         private static ScriptContext GetContextOrThrow()
@@ -72,16 +150,25 @@ namespace MochiSharp.Managed.Core
             return LoadAssemblyCore(path);
         }
 
-        // Create a script instance; returns a positive handle, 0 on error.
+        // Create a script instance with a caller-supplied instance key.
+        // Returns 1 on success, 0 on error.
         [UnmanagedCallersOnly]
-        public static int CreateInstance(IntPtr typeNamePtr)
+        public static int CreateInstance(IntPtr typeNamePtr, ulong instanceId)
         {
             try
             {
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
-                int id = GetContextOrThrow().CreateInstance(typeName);
-                _hostHook?.Log($"Created instance {id}: {typeName}");
-                return id;
+
+                bool created = GetContextOrThrow().CreateInstance(instanceId, typeName);
+                if (created)
+                {
+                    _hostHook?.Log($"Created instance {instanceId}: {typeName}");
+                }
+                else
+                {
+                    _hostHook?.Log($"Reusing existing instance {instanceId}: {typeName}");
+                }
+                return 1;
             }
             catch (Exception ex)
             {
@@ -90,34 +177,13 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        // Create a script instance with a caller-supplied GUID key.
-        // Returns 1 on success, 0 on error.
         [UnmanagedCallersOnly]
-        public static int CreateInstanceGuid(IntPtr typeNamePtr, IntPtr instanceGuidPtr)
+        public static void DestroyInstance(UIntPtr instanceIdPtr)
         {
             try
             {
-                string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
-
-                GetContextOrThrow().CreateInstance(instanceGuid, typeName);
-                _hostHook?.Log($"Created instance {instanceGuid}: {typeName}");
-                return 1;
-            }
-            catch (Exception ex)
-            {
-                _hostHook?.Log($"CreateInstanceGuid failed: {ex}");
-                return 0;
-            }
-        }
-
-        [UnmanagedCallersOnly]
-        public static void DestroyInstance(int instanceId)
-        {
-            try
-            {
-                GetContextOrThrow().DestroyInstance(instanceId);
+                ulong instanceKey = instanceIdPtr.ToUInt64()!;
+                GetContextOrThrow().DestroyInstance(instanceKey);
             }
             catch (Exception ex)
             {
@@ -125,24 +191,9 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        [UnmanagedCallersOnly]
-        public static void DestroyInstanceGuid(IntPtr instanceGuidPtr)
-        {
-            try
-            {
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
-                GetContextOrThrow().DestroyInstance(instanceGuid);
-            }
-            catch (Exception ex)
-            {
-                _hostHook?.Log($"DestroyInstanceGuid failed: {ex}");
-            }
-        }
-
         // Bind an instance method and return a method handle.
         [UnmanagedCallersOnly]
-        public static int BindInstanceMethod(int instanceId, IntPtr methodNamePtr, int signature)
+        public static int BindInstanceMethod(ulong instanceId, IntPtr methodNamePtr, int signature)
         {
             try
             {
@@ -154,27 +205,6 @@ namespace MochiSharp.Managed.Core
             catch (Exception ex)
             {
                 _hostHook?.Log($"BindInstanceMethod failed: {ex}");
-                return 0;
-            }
-        }
-
-        // Bind an instance method using a caller-supplied GUID instance key.
-        [UnmanagedCallersOnly]
-        public static int BindInstanceMethodGuid(IntPtr instanceGuidPtr, IntPtr methodNamePtr, int signature)
-        {
-            try
-            {
-                string guidText = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
-                Guid instanceGuid = Guid.Parse(guidText);
-                string methodName = Marshal.PtrToStringUTF8(methodNamePtr)!;
-
-                int id = GetContextOrThrow().BindInstanceMethod(instanceGuid, methodName, signature);
-                _hostHook?.Log($"Bound instance method {id}: instance {instanceGuid}.{methodName} (sig={signature})");
-                return id;
-            }
-            catch (Exception ex)
-            {
-                _hostHook?.Log($"BindInstanceMethodGuid failed: {ex}");
                 return 0;
             }
         }
@@ -247,6 +277,7 @@ namespace MochiSharp.Managed.Core
                 return 0;
             }
         }
+
 
         // Back-compat: previous API used by older native hosts.
         [UnmanagedCallersOnly]
