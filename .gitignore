@@ -11,3 +11,5 @@ bin-int/
 *.slnx
 *.sln
 *.user
+
+*.Build.props

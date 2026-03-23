@@ -4,7 +4,6 @@
 #include <iostream>
 #include <iomanip>
 #include <assert.h>
-#include <sstream>
 #ifdef _WIN32
 #include <combaseapi.h>
 #endif
@@ -21,50 +20,17 @@ hostfxr_close_fn close_fptr = nullptr;
 
 static std::filesystem::path GetExecutablePath()
 {
+#ifdef _WIN32
     wchar_t buffer[MAX_PATH];
     DWORD len = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
     if (len == 0)
     {
         return std::filesystem::current_path();
     }
-    return std::filesystem::path(buffer);
-}
-
-static void EmitDebugEvent(const std::string &eventPayload)
-{
-    HANDLE pipe = CreateFileW(
-        L"\\\\.\\pipe\\ignite-debug-events",
-        GENERIC_WRITE,
-        0,
-        nullptr,
-        OPEN_EXISTING,
-        0,
-        nullptr);
-
-    if (pipe == INVALID_HANDLE_VALUE)
-    {
-        return;
-    }
-
-    std::string line = eventPayload + "\n";
-    DWORD bytesWritten = 0;
-    WriteFile(pipe, line.c_str(), (DWORD)line.size(), &bytesWritten, nullptr);
-    FlushFileBuffers(pipe);
-    CloseHandle(pipe);
-}
-
-static void EmitRuntimeStartedEvent()
-{
-    std::ostringstream payload;
-    payload << "event=runtime-started;pid=" << GetCurrentProcessId();
-    EmitDebugEvent(payload.str());
-}
-
-static void EmitAssemblyLoadedEvent(const std::filesystem::path &assemblyPath)
-{
-    std::ostringstream payload;
-    payload << "event=assembly-loaded;pid=" << GetCurrentProcessId() << ";path=" << assemblyPath.string();
-    EmitDebugEvent(payload.str());
+    return std::filesystem::path(std::wstring(buffer, len));
+#else
+    return std::filesystem::current_path();
+#endif
 }
 
 static std::filesystem::path GetExecutableDirectory()
@@ -194,6 +160,21 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedCreateInstance == nullptr)
         {
+            std::cout << "[C++ Engine] Failed to load CreateInstance function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+        // Get CreateInstanceGuid
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("CreateInstanceGuid"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedCreateInstanceGuid);
+
+        if (rc != 0 || ManagedCreateInstanceGuid == nullptr)
+        {
             std::cout << "[C++ Engine] Failed to load CreateInstanceGuid function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
@@ -213,6 +194,21 @@ namespace MochiSharp
             return false;
         }
 
+        // Get DestroyInstanceGuid
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("DestroyInstanceGuid"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedDestroyInstanceGuid);
+
+        if (rc != 0 || ManagedDestroyInstanceGuid == nullptr)
+        {
+            std::cout << "[C++ Engine] Failed to load DestroyInstanceGuid function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
         // Get BindInstanceMethod
         rc = load_assembly_and_get_function_pointer(
             managedCorePath.c_str(),
@@ -225,6 +221,21 @@ namespace MochiSharp
         if (rc != 0 || ManagedBindInstanceMethod == nullptr)
         {
             std::cout << "[C++ Engine] Failed to load BindInstanceMethod function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+        // Get BindInstanceMethodGuid
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("BindInstanceMethodGuid"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedBindInstanceMethodGuid);
+
+        if (rc != 0 || ManagedBindInstanceMethodGuid == nullptr)
+        {
+            std::cout << "[C++ Engine] Failed to load BindInstanceMethodGuid function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -275,7 +286,6 @@ namespace MochiSharp
         EngineInterface api;
         api.LogMessage = &EngineLog;
         ManagedInit(&api);
-        EmitRuntimeStartedEvent();
 
         return true;
     }
@@ -294,13 +304,7 @@ namespace MochiSharp
         }
 
         auto resolved = scriptPath.string();
-        bool loaded = ManagedLoadAssembly(resolved.c_str()) != 0;
-        if (loaded)
-        {
-            EmitAssemblyLoadedEvent(scriptPath);
-        }
-
-        return loaded;
+        return ManagedLoadAssembly(resolved.c_str()) != 0;
     }
 
     bool DotNetHost::RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount)
@@ -313,17 +317,27 @@ namespace MochiSharp
         return ManagedRegisterSignature(signatureId, returnTypeName, parameterTypeNames, parameterCount) != 0;
     }
 
-    bool DotNetHost::CreateInstance(const char *typeName, uint64_t instanceId)
+    int DotNetHost::CreateInstance(const char *typeName)
     {
         if (!ManagedCreateInstance)
+        {
+            return 0;
+        }
+
+        return ManagedCreateInstance(typeName);
+    }
+
+    bool DotNetHost::CreateInstanceGuid(const char *typeName, const char *instanceGuid)
+    {
+        if (!ManagedCreateInstanceGuid)
         {
             return false;
         }
 
-        return ManagedCreateInstance(typeName, instanceId) != 0;
+        return ManagedCreateInstanceGuid(typeName, instanceGuid) != 0;
     }
 
-    void DotNetHost::DestroyInstance(uint64_t instanceId)
+    void DotNetHost::DestroyInstance(int instanceId)
     {
         if (ManagedDestroyInstance)
         {
@@ -331,7 +345,15 @@ namespace MochiSharp
         }
     }
 
-    int DotNetHost::BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature)
+    void DotNetHost::DestroyInstanceGuid(const char *instanceGuid)
+    {
+        if (ManagedDestroyInstanceGuid)
+        {
+            ManagedDestroyInstanceGuid(instanceGuid);
+        }
+    }
+
+    int DotNetHost::BindInstanceMethod(int instanceId, const char *methodName, int signature)
     {
         if (!ManagedBindInstanceMethod)
         {
@@ -339,6 +361,16 @@ namespace MochiSharp
         }
 
         return ManagedBindInstanceMethod(instanceId, methodName, signature);
+    }
+
+    int DotNetHost::BindInstanceMethodGuid(const char *instanceGuid, const char *methodName, int signature)
+    {
+        if (!ManagedBindInstanceMethodGuid)
+        {
+            return 0;
+        }
+
+        return ManagedBindInstanceMethodGuid(instanceGuid, methodName, signature);
     }
 
     int DotNetHost::BindStaticMethod(const char *typeName, const char *methodName, int signature)

@@ -9,8 +9,8 @@ namespace MochiSharp.Managed.Core
 {
     public static class Bootstrap
     {
-        private static HostHook _hostHook;
-        private static ScriptContext _scriptContext;
+        private static HostHook? _hostHook;
+        private static ScriptContext? _scriptContext;
 
         private static int LoadAssemblyCore(string path)
         {
@@ -78,7 +78,7 @@ namespace MochiSharp.Managed.Core
             }
         }
 
-        private static Assembly TryLoadReference(AssemblyName reference, string asmDir)
+        private static Assembly? TryLoadReference(AssemblyName reference, string asmDir)
         {
             try
             {
@@ -150,25 +150,16 @@ namespace MochiSharp.Managed.Core
             return LoadAssemblyCore(path);
         }
 
-        // Create a script instance with a caller-supplied instance key.
-        // Returns 1 on success, 0 on error.
+        // Create a script instance; returns a positive handle, 0 on error.
         [UnmanagedCallersOnly]
-        public static int CreateInstance(IntPtr typeNamePtr, ulong instanceId)
+        public static int CreateInstance(IntPtr typeNamePtr)
         {
             try
             {
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
-
-                bool created = GetContextOrThrow().CreateInstance(instanceId, typeName);
-                if (created)
-                {
-                    _hostHook?.Log($"Created instance {instanceId}: {typeName}");
-                }
-                else
-                {
-                    _hostHook?.Log($"Reusing existing instance {instanceId}: {typeName}");
-                }
-                return 1;
+                int id = GetContextOrThrow().CreateInstance(typeName);
+                _hostHook?.Log($"Created instance {id}: {typeName}");
+                return id;
             }
             catch (Exception ex)
             {
@@ -177,13 +168,40 @@ namespace MochiSharp.Managed.Core
             }
         }
 
+        // Create a script instance with a caller-supplied instance key.
+        // Returns 1 on success, 0 on error.
         [UnmanagedCallersOnly]
-        public static void DestroyInstance(UIntPtr instanceIdPtr)
+        public static int CreateInstanceGuid(IntPtr typeNamePtr, IntPtr instanceGuidPtr)
         {
             try
             {
-                ulong instanceKey = instanceIdPtr.ToUInt64()!;
-                GetContextOrThrow().DestroyInstance(instanceKey);
+                string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
+
+                bool created = GetContextOrThrow().CreateInstance(instanceKey, typeName);
+                if (created)
+                {
+                    _hostHook?.Log($"Created instance {instanceKey}: {typeName}");
+                }
+                else
+                {
+                    _hostHook?.Log($"Reusing existing instance {instanceKey}: {typeName}");
+                }
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"CreateInstanceGuid failed: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static void DestroyInstance(int instanceId)
+        {
+            try
+            {
+                GetContextOrThrow().DestroyInstance(instanceId);
             }
             catch (Exception ex)
             {
@@ -191,9 +209,23 @@ namespace MochiSharp.Managed.Core
             }
         }
 
+        [UnmanagedCallersOnly]
+        public static void DestroyInstanceGuid(IntPtr instanceGuidPtr)
+        {
+            try
+            {
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
+                GetContextOrThrow().DestroyInstance(instanceKey);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"DestroyInstanceGuid failed: {ex}");
+            }
+        }
+
         // Bind an instance method and return a method handle.
         [UnmanagedCallersOnly]
-        public static int BindInstanceMethod(ulong instanceId, IntPtr methodNamePtr, int signature)
+        public static int BindInstanceMethod(int instanceId, IntPtr methodNamePtr, int signature)
         {
             try
             {
@@ -205,6 +237,26 @@ namespace MochiSharp.Managed.Core
             catch (Exception ex)
             {
                 _hostHook?.Log($"BindInstanceMethod failed: {ex}");
+                return 0;
+            }
+        }
+
+        // Bind an instance method using a caller-supplied instance key.
+        [UnmanagedCallersOnly]
+        public static int BindInstanceMethodGuid(IntPtr instanceGuidPtr, IntPtr methodNamePtr, int signature)
+        {
+            try
+            {
+                string instanceKey = Marshal.PtrToStringUTF8(instanceGuidPtr)!;
+                string methodName = Marshal.PtrToStringUTF8(methodNamePtr)!;
+
+                int id = GetContextOrThrow().BindInstanceMethod(instanceKey, methodName, signature);
+                _hostHook?.Log($"Bound instance method {id}: instance {instanceKey}.{methodName} (sig={signature})");
+                return id;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"BindInstanceMethodGuid failed: {ex}");
                 return 0;
             }
         }
