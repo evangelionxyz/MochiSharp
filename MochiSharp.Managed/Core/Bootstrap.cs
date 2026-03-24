@@ -11,6 +11,8 @@ namespace MochiSharp.Managed.Core
     {
         private static HostHook? _hostHook;
         private static ScriptContext? _scriptContext;
+        private static string _serializeFieldAttributeTypeName = string.Empty;
+        private static string _entityTypeName = string.Empty;
 
         private static int LoadAssemblyCore(string path)
         {
@@ -27,12 +29,84 @@ namespace MochiSharp.Managed.Core
             {
                 string fullPath = System.IO.Path.GetFullPath(path);
                 _scriptContext = new ScriptContext(fullPath);
+                _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
                 _hostHook?.Log($"Loaded Script Assembly: {fullPath}");
                 return 1;
             }
             catch (Exception ex)
             {
                 _hostHook?.Log($"Failed to load script assembly: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int ConfigureSerialization(IntPtr serializeFieldAttributeTypeNamePtr, IntPtr entityTypeNamePtr)
+        {
+            try
+            {
+                _serializeFieldAttributeTypeName = Marshal.PtrToStringUTF8(serializeFieldAttributeTypeNamePtr) ?? string.Empty;
+                _entityTypeName = Marshal.PtrToStringUTF8(entityTypeNamePtr) ?? string.Empty;
+
+                if (_scriptContext != null)
+                {
+                    _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
+                }
+
+                _hostHook?.Log($"Configured serialization types: attr={_serializeFieldAttributeTypeName}, entity={_entityTypeName}");
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"ConfigureSerialization failed: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetTypeFields(IntPtr typeNamePtr)
+        {
+            try
+            {
+                string typeName = Marshal.PtrToStringUTF8(typeNamePtr) ?? string.Empty;
+                string result = GetContextOrThrow().GetTypeFields(typeName);
+                return Marshal.StringToCoTaskMemUTF8(result);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetTypeFields failed: {ex}");
+                return IntPtr.Zero;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int GetInstanceFieldValue(ulong instanceId, IntPtr fieldNamePtr, IntPtr bufferPtr, int bufferSize)
+        {
+            try
+            {
+                string fieldName = Marshal.PtrToStringUTF8(fieldNamePtr) ?? string.Empty;
+                bool ok = GetContextOrThrow().GetInstanceFieldValue(instanceId, fieldName, bufferPtr, bufferSize);
+                return ok ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetInstanceFieldValue failed: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int SetInstanceFieldValue(ulong instanceId, IntPtr fieldNamePtr, IntPtr bufferPtr, int bufferSize)
+        {
+            try
+            {
+                string fieldName = Marshal.PtrToStringUTF8(fieldNamePtr) ?? string.Empty;
+                bool ok = GetContextOrThrow().SetInstanceFieldValue(instanceId, fieldName, bufferPtr, bufferSize);
+                return ok ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"SetInstanceFieldValue failed: {ex}");
                 return 0;
             }
         }
@@ -110,6 +184,23 @@ namespace MochiSharp.Managed.Core
 
             string result = GetDerivedTypesCore(asmPath, baseTypeFullName);
             return Marshal.StringToCoTaskMemUTF8(result);
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetInstanceFields(ulong instanceId)
+        {
+            try
+            {
+                Console.WriteLine($"GetInstanceFields for instance: {instanceId}");
+
+                string result = _scriptContext!.GetInstanceFields(instanceId);
+                return Marshal.StringToCoTaskMemUTF8(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GetInstanceFields failed for instance: {instanceId}: {ex.Message}");
+                return IntPtr.Zero;
+            }
         }
 
         private static ScriptContext GetContextOrThrow()

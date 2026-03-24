@@ -36,6 +36,11 @@ namespace MochiSharp
     typedef int (CORECLR_DELEGATE_CALLTYPE *RegisterSignatureFn)(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
     typedef int (CORECLR_DELEGATE_CALLTYPE *CreateInstanceFn)(const char *typeName, uint64_t instanceId);
     typedef void (CORECLR_DELEGATE_CALLTYPE *DestroyInstanceFn)(uint64_t instanceId);
+    typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetInstanceFieldsFn)(uint64_t instanceId);
+    typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetTypeFieldsFn)(const char *typeName);
+    typedef int (CORECLR_DELEGATE_CALLTYPE *GetInstanceFieldValueFn)(uint64_t instanceId, const char *fieldName, void *buffer, int bufferSize);
+    typedef int (CORECLR_DELEGATE_CALLTYPE *SetInstanceFieldValueFn)(uint64_t instanceId, const char *fieldName, const void *buffer, int bufferSize);
+    typedef int (CORECLR_DELEGATE_CALLTYPE *ConfigureSerializationFn)(const char *serializeFieldAttributeTypeName, const char *entityTypeName);
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindInstanceMethodFn)(uint64_t instanceId, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindStaticMethodFn)(const char *typeName, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *InvokeFn)(int methodId, const void *argsPtr, int argCount, void *returnPtr);
@@ -55,6 +60,11 @@ namespace MochiSharp
         RegisterSignatureFn ManagedRegisterSignature = nullptr;
         CreateInstanceFn ManagedCreateInstance = nullptr;
         DestroyInstanceFn ManagedDestroyInstance = nullptr;
+        GetInstanceFieldsFn ManagedGetInstanceFields = nullptr;
+        GetTypeFieldsFn ManagedGetTypeFields = nullptr;
+        GetInstanceFieldValueFn ManagedGetInstanceFieldValue = nullptr;
+        SetInstanceFieldValueFn ManagedSetInstanceFieldValue = nullptr;
+        ConfigureSerializationFn ManagedConfigureSerialization = nullptr;
         BindInstanceMethodFn ManagedBindInstanceMethod = nullptr;
         BindStaticMethodFn ManagedBindStaticMethod = nullptr;
         InvokeFn ManagedInvoke = nullptr;
@@ -67,6 +77,12 @@ namespace MochiSharp
         bool RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
 		bool CreateInstance(const char *typeName, uint64_t instanceId);
         void DestroyInstance(uint64_t instanceId);
+        std::string GetInstanceFields(uint64_t instanceId);
+        std::string GetTypeFields(const char *typeName);
+        bool GetInstanceFieldValue(uint64_t instanceId, const char *fieldName, void *buffer, int bufferSize);
+        bool SetInstanceFieldValue(uint64_t instanceId, const char *fieldName, const void *buffer, int bufferSize);
+        bool ConfigureSerialization(const char *serializeFieldAttributeTypeName, const char *entityTypeName);
+
         int BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature);
         int BindStaticMethod(const char *typeName, const char *methodName, int signature);
         bool Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr);
