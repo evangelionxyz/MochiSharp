@@ -14,6 +14,17 @@ namespace MochiSharp.Managed.Core
         private static string _serializeFieldAttributeTypeName = string.Empty;
         private static string _entityTypeName = string.Empty;
 
+        private static void SafeLog(string message)
+        {
+            try
+            {
+                _hostHook?.Log(message);
+            }
+            catch
+            {
+            }
+        }
+
         private static int LoadAssemblyCore(string path)
         {
             if (_scriptContext != null)
@@ -362,9 +373,14 @@ namespace MochiSharp.Managed.Core
                 GetContextOrThrow().Invoke(methodId, argsPtr, argCount, returnPtr);
                 return 1;
             }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                SafeLog($"Invoke failed: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
+                return 0;
+            }
             catch (Exception ex)
             {
-                _hostHook?.Log($"Invoke failed: {ex}");
+                SafeLog($"Invoke failed: {ex.GetType().FullName}: {ex.Message}");
                 return 0;
             }
         }

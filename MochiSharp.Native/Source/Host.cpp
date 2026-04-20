@@ -501,25 +501,45 @@ namespace MochiSharp
     bool DotNetHost::Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr)
     {
         if (!ManagedInvoke)
+            return false;
+
+        if (argCount < 0)
         {
+            std::cout << "[MochiSharp.Native] Invoke failed: negative argCount\n";
             return false;
         }
 
-        return ManagedInvoke(methodId, argsPtr, argCount, returnPtr) != 0;
+        if (argCount > 0 && argsPtr == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Invoke failed: argsPtr is null with argCount > 0\n";
+            return false;
+        }
+
+#ifdef _WIN32
+        __try
+        {
+            int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
+            return result != 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            std::cout << "[MochiSharp.Native] Invoke trapped structured exception (possible script runtime fault)\n";
+            return false;
+        }
+#else
+        int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
+        return result != 0;
+#endif
     }
 
     std::string DotNetHost::GetDerivedTypes(const char *asmPath, const char *baseType)
 	{
         if (!ManagedGetDerivedTypes)
-        {
             return {};
-        }
 
         const char *result = ManagedGetDerivedTypes(asmPath, baseType);
         if (!result)
-        {
             return {};
-        }
 
         std::string managedResult(result);
 #ifdef _WIN32
