@@ -319,6 +319,40 @@ namespace MochiSharp.Managed.Core
             {
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
                 string methodName = Marshal.PtrToStringUTF8(methodNamePtr)!;
+                // Diagnostic: verify whether the requested type is present in any loaded assembly
+                try
+                {
+                    var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                    _hostHook?.Log($"Searching for type '{typeName}' in {assemblies.Length} loaded assemblies...");
+                    bool found = false;
+                    foreach (var asm in assemblies)
+                    {
+                        try
+                        {
+                            var t = asm.GetType(typeName, throwOnError: false);
+                            if (t != null)
+                            {
+                                _hostHook?.Log($"Type '{typeName}' found in assembly: {asm.GetName().Name} (Location='{asm.Location}')");
+                                found = true;
+                                break;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _hostHook?.Log($"Warning while inspecting assembly {asm.GetName().Name}: {ex.Message}");
+                        }
+                    }
+
+                    if (!found)
+                    {
+                        _hostHook?.Log($"Type '{typeName}' was NOT found in loaded assemblies.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _hostHook?.Log($"Type search diagnostic failed: {ex}");
+                }
+
                 int id = GetContextOrThrow().BindStaticMethod(typeName, methodName, signature);
                 _hostHook?.Log($"Bound static method {id}: {typeName}.{methodName} (sig={signature})");
                 return id;

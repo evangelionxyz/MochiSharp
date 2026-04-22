@@ -978,7 +978,7 @@ namespace MochiSharp.Managed.Core
 				return typeof(bool);
 			}
 
-			Type? t = null;
+			Type t = null;
 
 			// Try standard resolution first.
 			t = Type.GetType(typeName.Trim(), throwOnError: false);
