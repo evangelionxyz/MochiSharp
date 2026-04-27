@@ -683,6 +683,19 @@ namespace MochiSharp.Managed.Core
 
         private bool TryWriteFieldValueToBuffer(Type fieldType, object? value, IntPtr buffer, int bufferSize)
 		{
+			if (fieldType == typeof(string))
+			{
+				string str = value as string ?? string.Empty;
+				byte[] bytes = Encoding.UTF8.GetBytes(str);
+				int copyLen = Math.Min(bytes.Length, bufferSize - 1);
+				if (copyLen > 0)
+				{
+					Marshal.Copy(bytes, 0, buffer, copyLen);
+				}
+				Marshal.WriteByte(buffer, copyLen, 0);
+				return true;
+			}
+
 			if (fieldType == typeof(bool))
 			{
 				if (bufferSize < sizeof(byte)) return false;
@@ -802,6 +815,26 @@ namespace MochiSharp.Managed.Core
        private bool TryReadFieldValueFromBuffer(Type fieldType, IntPtr buffer, int bufferSize, out object? value)
 		{
 			value = null;
+
+			if (fieldType == typeof(string))
+			{
+				int len = 0;
+				while (len < bufferSize && Marshal.ReadByte(buffer, len) != 0)
+				{
+					len++;
+				}
+				
+				if (len == 0)
+				{
+					value = string.Empty;
+					return true;
+				}
+				
+				byte[] bytes = new byte[len];
+				Marshal.Copy(buffer, bytes, 0, len);
+				value = Encoding.UTF8.GetString(bytes);
+				return true;
+			}
 
 			if (fieldType == typeof(bool))
 			{
