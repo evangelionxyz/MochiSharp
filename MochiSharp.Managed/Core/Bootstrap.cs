@@ -11,6 +11,19 @@ namespace MochiSharp.Managed.Core
     {
         private static HostHook? _hostHook;
         private static ScriptContext? _scriptContext;
+        private static string _serializeFieldAttributeTypeName = string.Empty;
+        private static string _entityTypeName = string.Empty;
+
+        private static void SafeLog(string message)
+        {
+            try
+            {
+                _hostHook?.Log(message);
+            }
+            catch
+            {
+            }
+        }
 
         private static int LoadAssemblyCore(string path)
         {
@@ -27,12 +40,84 @@ namespace MochiSharp.Managed.Core
             {
                 string fullPath = System.IO.Path.GetFullPath(path);
                 _scriptContext = new ScriptContext(fullPath);
+                _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
                 _hostHook?.Log($"Loaded Script Assembly: {fullPath}");
                 return 1;
             }
             catch (Exception ex)
             {
                 _hostHook?.Log($"Failed to load script assembly: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int ConfigureSerialization(IntPtr serializeFieldAttributeTypeNamePtr, IntPtr entityTypeNamePtr)
+        {
+            try
+            {
+                _serializeFieldAttributeTypeName = Marshal.PtrToStringUTF8(serializeFieldAttributeTypeNamePtr) ?? string.Empty;
+                _entityTypeName = Marshal.PtrToStringUTF8(entityTypeNamePtr) ?? string.Empty;
+
+                if (_scriptContext != null)
+                {
+                    _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
+                }
+
+                _hostHook?.Log($"Configured serialization types: attr={_serializeFieldAttributeTypeName}, entity={_entityTypeName}");
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"ConfigureSerialization failed: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetTypeFields(IntPtr typeNamePtr)
+        {
+            try
+            {
+                string typeName = Marshal.PtrToStringUTF8(typeNamePtr) ?? string.Empty;
+                string result = GetContextOrThrow().GetTypeFields(typeName);
+                return Marshal.StringToCoTaskMemUTF8(result);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetTypeFields failed: {ex}");
+                return IntPtr.Zero;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int GetInstanceFieldValue(ulong instanceId, IntPtr fieldNamePtr, IntPtr bufferPtr, int bufferSize)
+        {
+            try
+            {
+                string fieldName = Marshal.PtrToStringUTF8(fieldNamePtr) ?? string.Empty;
+                bool ok = GetContextOrThrow().GetInstanceFieldValue(instanceId, fieldName, bufferPtr, bufferSize);
+                return ok ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetInstanceFieldValue failed: {ex}");
+                return 0;
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static int SetInstanceFieldValue(ulong instanceId, IntPtr fieldNamePtr, IntPtr bufferPtr, int bufferSize)
+        {
+            try
+            {
+                string fieldName = Marshal.PtrToStringUTF8(fieldNamePtr) ?? string.Empty;
+                bool ok = GetContextOrThrow().SetInstanceFieldValue(instanceId, fieldName, bufferPtr, bufferSize);
+                return ok ? 1 : 0;
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"SetInstanceFieldValue failed: {ex}");
                 return 0;
             }
         }
@@ -110,6 +195,23 @@ namespace MochiSharp.Managed.Core
 
             string result = GetDerivedTypesCore(asmPath, baseTypeFullName);
             return Marshal.StringToCoTaskMemUTF8(result);
+        }
+
+        [UnmanagedCallersOnly]
+        public static IntPtr GetInstanceFields(ulong instanceId)
+        {
+            try
+            {
+                Console.WriteLine($"GetInstanceFields for instance: {instanceId}");
+
+                string result = _scriptContext!.GetInstanceFields(instanceId);
+                return Marshal.StringToCoTaskMemUTF8(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GetInstanceFields failed for instance: {instanceId}: {ex.Message}");
+                return IntPtr.Zero;
+            }
         }
 
         private static ScriptContext GetContextOrThrow()
@@ -217,6 +319,40 @@ namespace MochiSharp.Managed.Core
             {
                 string typeName = Marshal.PtrToStringUTF8(typeNamePtr)!;
                 string methodName = Marshal.PtrToStringUTF8(methodNamePtr)!;
+                // Diagnostic: verify whether the requested type is present in any loaded assembly
+                try
+                {
+                    var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                    _hostHook?.Log($"Searching for type '{typeName}' in {assemblies.Length} loaded assemblies...");
+                    bool found = false;
+                    foreach (var asm in assemblies)
+                    {
+                        try
+                        {
+                            var t = asm.GetType(typeName, throwOnError: false);
+                            if (t != null)
+                            {
+                                _hostHook?.Log($"Type '{typeName}' found in assembly: {asm.GetName().Name} (Location='{asm.Location}')");
+                                found = true;
+                                break;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _hostHook?.Log($"Warning while inspecting assembly {asm.GetName().Name}: {ex.Message}");
+                        }
+                    }
+
+                    if (!found)
+                    {
+                        _hostHook?.Log($"Type '{typeName}' was NOT found in loaded assemblies.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _hostHook?.Log($"Type search diagnostic failed: {ex}");
+                }
+
                 int id = GetContextOrThrow().BindStaticMethod(typeName, methodName, signature);
                 _hostHook?.Log($"Bound static method {id}: {typeName}.{methodName} (sig={signature})");
                 return id;
@@ -271,9 +407,14 @@ namespace MochiSharp.Managed.Core
                 GetContextOrThrow().Invoke(methodId, argsPtr, argCount, returnPtr);
                 return 1;
             }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                SafeLog($"Invoke failed: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
+                return 0;
+            }
             catch (Exception ex)
             {
-                _hostHook?.Log($"Invoke failed: {ex}");
+                SafeLog($"Invoke failed: {ex.GetType().FullName}: {ex.Message}");
                 return 0;
             }
         }

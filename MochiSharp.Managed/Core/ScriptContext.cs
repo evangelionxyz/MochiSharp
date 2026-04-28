@@ -3,13 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
+using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using System.Text;
 
 namespace MochiSharp.Managed.Core
 {
 	public sealed class ScriptContext
 	{
+        private string _serializeFieldAttributeTypeName = string.Empty;
+		private string _entityTypeName = string.Empty;
+
 		private sealed class PluginLoadContext : AssemblyLoadContext
 		{
 			private readonly AssemblyDependencyResolver _resolver;
@@ -21,6 +27,8 @@ namespace MochiSharp.Managed.Core
 				_resolver = new AssemblyDependencyResolver(mainAssemblyPath);
 				_coreAssembly = coreAssembly;
 			}
+
+
 
 			protected override Assembly? Load(AssemblyName assemblyName)
 			{
@@ -61,6 +69,15 @@ namespace MochiSharp.Managed.Core
 			}
 		}
 
+		private class FieldAccessor
+		{
+			public required FieldInfo Field;
+			public required Func<object, object?> Getter;
+			public required Action<object, object?> Setter;
+			public required bool IsPublic;
+			public required bool HasSerializeFieldAttribute;
+		}
+
 		private readonly string _pluginPath;
 		private readonly string _shadowDirectory;
 		private readonly string _shadowAssemblyPath;
@@ -73,6 +90,7 @@ namespace MochiSharp.Managed.Core
 
 		private int _nextMethodId = 1;
 		private readonly Dictionary<int, MethodBinding> _methods = new();
+		private readonly Dictionary<Type, Dictionary<string, FieldAccessor>> _typeFieldAccessorCache = new();
 
 		private readonly Dictionary<int, Signature> _signatures = new();
 
@@ -102,6 +120,8 @@ namespace MochiSharp.Managed.Core
 			}
 		}
 
+
+
 		public ScriptContext(string pluginAssemblyPath)
 		{
 			if (string.IsNullOrWhiteSpace(pluginAssemblyPath))
@@ -122,6 +142,12 @@ namespace MochiSharp.Managed.Core
 
 			_loadContext = new PluginLoadContext(_pluginPath, typeof(Bootstrap).Assembly);
 			_pluginAssembly = _loadContext.LoadFromAssemblyPath(_shadowAssemblyPath);
+		}
+
+		public void ConfigureSerializationTypeNames(string serializeFieldAttributeTypeName, string entityTypeName)
+		{
+			_serializeFieldAttributeTypeName = serializeFieldAttributeTypeName?.Trim() ?? string.Empty;
+			_entityTypeName = entityTypeName?.Trim() ?? string.Empty;
 		}
 
 		public void Unload()
@@ -163,6 +189,17 @@ namespace MochiSharp.Managed.Core
 				.ToArray();
 
 			return string.Join("|", derived);
+		}
+
+		public string GetTypeFields(string typeName)
+		{
+			if (string.IsNullOrWhiteSpace(typeName))
+			{
+				return string.Empty;
+			}
+
+			Type type = ResolvePluginType(typeName);
+			return BuildFieldMetadataPayload(type);
 		}
 
 		public void RegisterSignature(int signatureId, string returnTypeName, string[] parameterTypeNames)
@@ -211,6 +248,69 @@ namespace MochiSharp.Managed.Core
 					d.Dispose();
 				}
 			}
+		}
+
+		public string GetInstanceFields(ulong instanceId)
+		{
+			if (instanceId == 0)
+			{
+				throw new ArgumentException("Instance id is required", nameof(instanceId));
+			}
+
+			if (!_instances.TryGetValue(instanceId, out var existingInstance) || existingInstance == null)
+			{
+				throw new KeyNotFoundException($"Instance id not found: {instanceId}");
+			}
+
+			var type = existingInstance.GetType();
+			return BuildFieldMetadataPayload(type);
+		}
+
+		public bool GetInstanceFieldValue(ulong instanceId, string fieldName, IntPtr buffer, int bufferSize)
+		{
+			if (!_instances.TryGetValue(instanceId, out var instance))
+			{
+				return false;
+			}
+
+			if (string.IsNullOrWhiteSpace(fieldName) || buffer == IntPtr.Zero || bufferSize <= 0)
+			{
+				return false;
+			}
+
+			if (!TryGetFieldAccessor(instance.GetType(), fieldName, out var accessor))
+			{
+				return false;
+			}
+
+			object? value = accessor.Getter(instance);
+			return TryWriteFieldValueToBuffer(accessor.Field.FieldType, value, buffer, bufferSize);
+		}
+
+		public bool SetInstanceFieldValue(ulong instanceId, string fieldName, IntPtr buffer, int bufferSize)
+		{
+			if (!_instances.TryGetValue(instanceId, out var instance))
+			{
+				return false;
+			}
+
+			if (string.IsNullOrWhiteSpace(fieldName) || buffer == IntPtr.Zero || bufferSize <= 0)
+			{
+				return false;
+			}
+
+			if (!TryGetFieldAccessor(instance.GetType(), fieldName, out var accessor))
+			{
+				return false;
+			}
+
+			if (!TryReadFieldValueFromBuffer(accessor.Field.FieldType, buffer, bufferSize, out object? value))
+			{
+				return false;
+			}
+
+			accessor.Setter(instance, value);
+			return true;
 		}
 
 		public int BindInstanceMethod(ulong instanceId, string methodName, int signatureId)
@@ -439,6 +539,432 @@ namespace MochiSharp.Managed.Core
 			throw new TypeLoadException($"Type not found: {typeName}");
 		}
 
+		private string BuildFieldMetadataPayload(Type type)
+		{
+			if (!_typeFieldAccessorCache.TryGetValue(type, out var accessorsByName))
+			{
+				accessorsByName = BuildFieldAccessors(type);
+				_typeFieldAccessorCache[type] = accessorsByName;
+			}
+
+			if (accessorsByName.Count == 0)
+			{
+				return string.Empty;
+			}
+
+			var builder = new StringBuilder();
+			foreach (var accessor in accessorsByName.Values)
+			{
+				if (builder.Length > 0)
+				{
+					builder.Append('|');
+				}
+
+				builder.Append(accessor.Field.Name);
+				builder.Append('~');
+				builder.Append(accessor.Field.FieldType.FullName ?? accessor.Field.FieldType.Name);
+				builder.Append('~');
+				builder.Append(accessor.IsPublic ? '1' : '0');
+				builder.Append('~');
+				builder.Append(accessor.HasSerializeFieldAttribute ? '1' : '0');
+			}
+
+			return builder.ToString();
+		}
+
+		private bool TryGetFieldAccessor(Type type, string fieldName, out FieldAccessor accessor)
+		{
+			if (!_typeFieldAccessorCache.TryGetValue(type, out var accessorsByName))
+			{
+				accessorsByName = BuildFieldAccessors(type);
+				_typeFieldAccessorCache[type] = accessorsByName;
+			}
+
+			return accessorsByName.TryGetValue(fieldName, out accessor!);
+		}
+
+		private Dictionary<string, FieldAccessor> BuildFieldAccessors(Type type)
+		{
+			const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+			var fields = type.GetFields(flags)
+				.Where(f => IsSerializableField(f))
+				.ToArray();
+
+			var result = new Dictionary<string, FieldAccessor>(StringComparer.Ordinal);
+			foreach (var field in fields)
+			{
+				bool hasSerializeField = HasSerializeFieldAttribute(field);
+				result[field.Name] = new FieldAccessor
+				{
+					Field = field,
+					Getter = CreateFieldGetter(field),
+					Setter = CreateFieldSetter(field),
+					IsPublic = field.IsPublic,
+					HasSerializeFieldAttribute = hasSerializeField
+				};
+			}
+
+			return result;
+		}
+
+        private bool IsSerializableField(FieldInfo field)
+		{
+			if (field.IsStatic || field.IsLiteral || field.IsInitOnly || field.IsSpecialName)
+			{
+				return false;
+			}
+
+			if (field.Name.StartsWith("<", StringComparison.Ordinal) || field.IsNotSerialized)
+			{
+				return false;
+			}
+
+			bool hasSerializeField = HasSerializeFieldAttribute(field);
+			return field.IsPublic || hasSerializeField;
+		}
+
+		private bool HasSerializeFieldAttribute(MemberInfo member)
+		{
+			if (string.IsNullOrWhiteSpace(_serializeFieldAttributeTypeName))
+			{
+				return false;
+			}
+
+			return member.GetCustomAttributesData()
+			  .Any(a => string.Equals(a.AttributeType.FullName, _serializeFieldAttributeTypeName, StringComparison.Ordinal));
+		}
+
+		private static Func<object, object?> CreateFieldGetter(FieldInfo field)
+		{
+			var dynamicMethod = new DynamicMethod(
+				$"MochiSharp_Get_{field.DeclaringType?.FullName}_{field.Name}",
+				typeof(object),
+				new[] { typeof(object) },
+				restrictedSkipVisibility: true);
+
+			ILGenerator il = dynamicMethod.GetILGenerator();
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Castclass, field.DeclaringType!);
+			il.Emit(OpCodes.Ldfld, field);
+			if (field.FieldType.IsValueType)
+			{
+				il.Emit(OpCodes.Box, field.FieldType);
+			}
+			il.Emit(OpCodes.Ret);
+
+			return (Func<object, object?>)dynamicMethod.CreateDelegate(typeof(Func<object, object?>));
+		}
+
+		private static Action<object, object?> CreateFieldSetter(FieldInfo field)
+		{
+			var dynamicMethod = new DynamicMethod(
+				$"MochiSharp_Set_{field.DeclaringType?.FullName}_{field.Name}",
+				typeof(void),
+				new[] { typeof(object), typeof(object) },
+				restrictedSkipVisibility: true);
+
+			ILGenerator il = dynamicMethod.GetILGenerator();
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Castclass, field.DeclaringType!);
+			il.Emit(OpCodes.Ldarg_1);
+			if (field.FieldType.IsValueType)
+			{
+				il.Emit(OpCodes.Unbox_Any, field.FieldType);
+			}
+			else
+			{
+				il.Emit(OpCodes.Castclass, field.FieldType);
+			}
+			il.Emit(OpCodes.Stfld, field);
+			il.Emit(OpCodes.Ret);
+
+			return (Action<object, object?>)dynamicMethod.CreateDelegate(typeof(Action<object, object?>));
+		}
+
+        private bool TryWriteFieldValueToBuffer(Type fieldType, object? value, IntPtr buffer, int bufferSize)
+		{
+			if (fieldType == typeof(string))
+			{
+				string str = value as string ?? string.Empty;
+				byte[] bytes = Encoding.UTF8.GetBytes(str);
+				int copyLen = Math.Min(bytes.Length, bufferSize - 1);
+				if (copyLen > 0)
+				{
+					Marshal.Copy(bytes, 0, buffer, copyLen);
+				}
+				Marshal.WriteByte(buffer, copyLen, 0);
+				return true;
+			}
+
+			if (fieldType == typeof(bool))
+			{
+				if (bufferSize < sizeof(byte)) return false;
+				Marshal.WriteByte(buffer, (bool)(value ?? false) ? (byte)1 : (byte)0);
+				return true;
+			}
+
+			if (fieldType == typeof(byte))
+			{
+				if (bufferSize < sizeof(byte)) return false;
+				Marshal.WriteByte(buffer, value is byte b ? b : (byte)0);
+				return true;
+			}
+
+			if (fieldType == typeof(sbyte))
+			{
+				if (bufferSize < sizeof(sbyte)) return false;
+				Marshal.WriteByte(buffer, unchecked((byte)(value is sbyte sb ? sb : (sbyte)0)));
+				return true;
+			}
+
+			if (fieldType == typeof(short))
+			{
+				if (bufferSize < sizeof(short)) return false;
+				Marshal.WriteInt16(buffer, value is short s ? s : (short)0);
+				return true;
+			}
+
+			if (fieldType == typeof(ushort))
+			{
+				if (bufferSize < sizeof(ushort)) return false;
+				Marshal.WriteInt16(buffer, unchecked((short)(value is ushort us ? us : (ushort)0)));
+				return true;
+			}
+
+			if (fieldType == typeof(char))
+			{
+				if (bufferSize < sizeof(char)) return false;
+				Marshal.WriteInt16(buffer, value is char c ? c : '\0');
+				return true;
+			}
+
+			if (fieldType == typeof(int))
+			{
+				if (bufferSize < sizeof(int)) return false;
+				Marshal.WriteInt32(buffer, value is int i ? i : 0);
+				return true;
+			}
+
+			if (fieldType == typeof(uint))
+			{
+				if (bufferSize < sizeof(uint)) return false;
+				Marshal.WriteInt32(buffer, unchecked((int)(value is uint ui ? ui : 0u)));
+				return true;
+			}
+
+			if (fieldType == typeof(long))
+			{
+				if (bufferSize < sizeof(long)) return false;
+				Marshal.WriteInt64(buffer, value is long l ? l : 0L);
+				return true;
+			}
+
+			if (fieldType == typeof(ulong))
+			{
+				if (bufferSize < sizeof(ulong)) return false;
+				Marshal.WriteInt64(buffer, unchecked((long)(value is ulong ul ? ul : 0UL)));
+				return true;
+			}
+
+			if (fieldType == typeof(float))
+			{
+				if (bufferSize < sizeof(float)) return false;
+				Marshal.StructureToPtr(value is float f ? f : 0.0f, buffer, fDeleteOld: false);
+				return true;
+			}
+
+			if (fieldType == typeof(double))
+			{
+				if (bufferSize < sizeof(double)) return false;
+				Marshal.StructureToPtr(value is double d ? d : 0.0, buffer, fDeleteOld: false);
+				return true;
+			}
+
+			if (IsEntityFieldType(fieldType))
+			{
+				if (bufferSize < sizeof(ulong)) return false;
+				ulong id = 0;
+				if (value != null)
+				{
+					var idProperty = value.GetType().GetProperty("ID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (idProperty?.PropertyType == typeof(ulong))
+					{
+						id = (ulong)(idProperty.GetValue(value) ?? 0UL);
+					}
+				}
+				Marshal.WriteInt64(buffer, unchecked((long)id));
+				return true;
+			}
+
+			if (fieldType.IsValueType)
+			{
+				int typeSize = Marshal.SizeOf(fieldType);
+				if (bufferSize < typeSize)
+				{
+					return false;
+				}
+
+				object boxed = value ?? Activator.CreateInstance(fieldType)!;
+				Marshal.StructureToPtr(boxed, buffer, fDeleteOld: false);
+				return true;
+			}
+
+			return false;
+		}
+
+       private bool TryReadFieldValueFromBuffer(Type fieldType, IntPtr buffer, int bufferSize, out object? value)
+		{
+			value = null;
+
+			if (fieldType == typeof(string))
+			{
+				int len = 0;
+				while (len < bufferSize && Marshal.ReadByte(buffer, len) != 0)
+				{
+					len++;
+				}
+				
+				if (len == 0)
+				{
+					value = string.Empty;
+					return true;
+				}
+				
+				byte[] bytes = new byte[len];
+				Marshal.Copy(buffer, bytes, 0, len);
+				value = Encoding.UTF8.GetString(bytes);
+				return true;
+			}
+
+			if (fieldType == typeof(bool))
+			{
+				if (bufferSize < sizeof(byte)) return false;
+				value = Marshal.ReadByte(buffer) != 0;
+				return true;
+			}
+
+			if (fieldType == typeof(byte))
+			{
+				if (bufferSize < sizeof(byte)) return false;
+				value = Marshal.ReadByte(buffer);
+				return true;
+			}
+
+			if (fieldType == typeof(sbyte))
+			{
+				if (bufferSize < sizeof(sbyte)) return false;
+				value = unchecked((sbyte)Marshal.ReadByte(buffer));
+				return true;
+			}
+
+			if (fieldType == typeof(short))
+			{
+				if (bufferSize < sizeof(short)) return false;
+				value = Marshal.ReadInt16(buffer);
+				return true;
+			}
+
+			if (fieldType == typeof(ushort))
+			{
+				if (bufferSize < sizeof(ushort)) return false;
+				value = unchecked((ushort)Marshal.ReadInt16(buffer));
+				return true;
+			}
+
+			if (fieldType == typeof(char))
+			{
+				if (bufferSize < sizeof(char)) return false;
+				value = unchecked((char)Marshal.ReadInt16(buffer));
+				return true;
+			}
+
+			if (fieldType == typeof(int))
+			{
+				if (bufferSize < sizeof(int)) return false;
+				value = Marshal.ReadInt32(buffer);
+				return true;
+			}
+
+			if (fieldType == typeof(uint))
+			{
+				if (bufferSize < sizeof(uint)) return false;
+				value = unchecked((uint)Marshal.ReadInt32(buffer));
+				return true;
+			}
+
+			if (fieldType == typeof(long))
+			{
+				if (bufferSize < sizeof(long)) return false;
+				value = Marshal.ReadInt64(buffer);
+				return true;
+			}
+
+			if (fieldType == typeof(ulong))
+			{
+				if (bufferSize < sizeof(ulong)) return false;
+				value = unchecked((ulong)Marshal.ReadInt64(buffer));
+				return true;
+			}
+
+			if (fieldType == typeof(float))
+			{
+				if (bufferSize < sizeof(float)) return false;
+				value = Marshal.PtrToStructure<float>(buffer);
+				return true;
+			}
+
+			if (fieldType == typeof(double))
+			{
+				if (bufferSize < sizeof(double)) return false;
+				value = Marshal.PtrToStructure<double>(buffer);
+				return true;
+			}
+
+			if (IsEntityFieldType(fieldType))
+			{
+				if (bufferSize < sizeof(ulong)) return false;
+				ulong id = unchecked((ulong)Marshal.ReadInt64(buffer));
+				if (id == 0)
+				{
+					value = null;
+					return true;
+				}
+
+				var ctor = fieldType.GetConstructor(
+					BindingFlags.Instance | BindingFlags.NonPublic,
+					binder: null,
+					types: new[] { typeof(ulong) },
+					modifiers: null);
+
+				if (ctor == null)
+				{
+					return false;
+				}
+
+				value = ctor.Invoke(new object[] { id });
+				return true;
+			}
+
+			if (fieldType.IsValueType)
+			{
+				int typeSize = Marshal.SizeOf(fieldType);
+				if (bufferSize < typeSize)
+				{
+					return false;
+				}
+
+				value = Marshal.PtrToStructure(buffer, fieldType);
+				return value != null;
+			}
+
+			return false;
+		}
+
+        private bool IsEntityFieldType(Type type)
+		{
+          return !string.IsNullOrWhiteSpace(_entityTypeName) && string.Equals(type.FullName, _entityTypeName, StringComparison.Ordinal);
+		}
+
 		private Type ResolveType(string typeName)
 		{
 			if (string.IsNullOrWhiteSpace(typeName))
@@ -485,7 +1011,7 @@ namespace MochiSharp.Managed.Core
 				return typeof(bool);
 			}
 
-			Type? t = null;
+			Type t = null;
 
 			// Try standard resolution first.
 			t = Type.GetType(typeName.Trim(), throwOnError: false);

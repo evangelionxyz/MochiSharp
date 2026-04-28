@@ -94,7 +94,7 @@ namespace MochiSharp
 {
     void DotNetHost::EngineLog(const char *msg)
     {
-        std::cout << "[C++ Engine] " << msg << "\n";
+        std::cout << "[MochiSharp.Native] " << msg << "\n";
     }
 
     bool DotNetHost::Init(const std::wstring &configPath)
@@ -107,7 +107,7 @@ namespace MochiSharp
         auto configFullPath = ResolvePathRelativeToExecutable(std::filesystem::path(configPath));
         if (!std::filesystem::exists(configFullPath))
         {
-            std::wcout << L"[C++ Engine] runtimeconfig not found: " << configFullPath.wstring() << L"\n";
+            std::wcout << L"[MochiSharp.Native] runtimeconfig not found: " << configFullPath.wstring() << L"\n";
             return false;
         }
 
@@ -134,9 +134,11 @@ namespace MochiSharp
         auto managedCorePath = (m_BaseDir / L"MochiSharp.Managed.dll");
         if (!std::filesystem::exists(managedCorePath))
         {
-            std::wcout << L"[C++ Engine] MochiSharp.Managed.dll not found: " << managedCorePath.wstring() << L"\n";
+            std::wcout << L"[MochiSharp.Native] MochiSharp.Managed.dll not found: " << managedCorePath.wstring() << L"\n";
             return false;
         }
+
+        std::wcout << L"[MochiSharp.Native] Trying to load " << managedCorePath.wstring() << L" functions\n";
 
         // Get Initialize
         rc = load_assembly_and_get_function_pointer(
@@ -149,7 +151,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedInit == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load Initialize function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load Initialize function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -164,7 +166,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedLoadAssembly == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load LoadAssembly function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load LoadAssembly function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -179,7 +181,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedRegisterSignature == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load RegisterSignature function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load RegisterSignature function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -194,7 +196,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedCreateInstance == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load CreateInstanceGuid function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load CreateInstanceGuid function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -209,7 +211,82 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedDestroyInstance == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load DestroyInstance function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load DestroyInstance function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+		// Get GetInstanceFields
+		rc = load_assembly_and_get_function_pointer(
+			managedCorePath.c_str(),
+			STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+			STR("GetInstanceFields"),
+			UNMANAGEDCALLERSONLY_METHOD,
+			nullptr,
+			(void **)&ManagedGetInstanceFields);
+
+		if (rc != 0 || ManagedGetInstanceFields == nullptr)
+		{
+			std::cout << "[MochiSharp.Native] Failed to load GetInstanceFields function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+			return false;
+		}
+
+        // Get GetTypeFields
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("GetTypeFields"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedGetTypeFields);
+
+        if (rc != 0 || ManagedGetTypeFields == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Failed to load GetTypeFields function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+        // Get GetInstanceFieldValue
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("GetInstanceFieldValue"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedGetInstanceFieldValue);
+
+        if (rc != 0 || ManagedGetInstanceFieldValue == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Failed to load GetInstanceFieldValue function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+        // Get SetInstanceFieldValue
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("SetInstanceFieldValue"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedSetInstanceFieldValue);
+
+        if (rc != 0 || ManagedSetInstanceFieldValue == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Failed to load SetInstanceFieldValue function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            return false;
+        }
+
+        // Get ConfigureSerialization
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("ConfigureSerialization"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedConfigureSerialization);
+
+        if (rc != 0 || ManagedConfigureSerialization == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Failed to load ConfigureSerialization function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -224,7 +301,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedBindInstanceMethod == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load BindInstanceMethod function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load BindInstanceMethod function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -239,7 +316,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedBindStaticMethod == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load BindStaticMethod function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load BindStaticMethod function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -254,7 +331,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedInvoke == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load Invoke function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load Invoke function (rc: 0x" << std::hex << rc << std::dec << ")\n";
             return false;
         }
 
@@ -268,7 +345,7 @@ namespace MochiSharp
 
         if (rc != 0 || ManagedGetDerivedTypes == nullptr)
         {
-            std::cout << "[C++ Engine] Failed to load GetDerivedTypes function (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            std::cout << "[MochiSharp.Native] Failed to load GetDerivedTypes function (rc: 0x" << std::hex << rc << std::dec << ")\n";
         }
 
         // Call Initialize
@@ -331,7 +408,77 @@ namespace MochiSharp
         }
     }
 
-    int DotNetHost::BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature)
+	std::string DotNetHost::GetInstanceFields(uint64_t instanceId)
+	{
+		if (!ManagedGetInstanceFields)
+		{
+			return {};
+		}
+
+		const char *result = ManagedGetInstanceFields(instanceId);
+		if (!result)
+		{
+			return {};
+		}
+
+		std::string managedResult(result);
+#ifdef _WIN32
+		CoTaskMemFree((LPVOID)result);
+#endif
+		return managedResult;
+	}
+
+    std::string DotNetHost::GetTypeFields(const char *typeName)
+    {
+        if (!ManagedGetTypeFields)
+        {
+            return {};
+        }
+
+        const char *result = ManagedGetTypeFields(typeName);
+        if (!result)
+        {
+            return {};
+        }
+
+        std::string managedResult(result);
+#ifdef _WIN32
+        CoTaskMemFree((LPVOID)result);
+#endif
+        return managedResult;
+    }
+
+    bool DotNetHost::GetInstanceFieldValue(uint64_t instanceId, const char *fieldName, void *buffer, int bufferSize)
+    {
+        if (!ManagedGetInstanceFieldValue)
+        {
+            return false;
+        }
+
+        return ManagedGetInstanceFieldValue(instanceId, fieldName, buffer, bufferSize) != 0;
+    }
+
+    bool DotNetHost::SetInstanceFieldValue(uint64_t instanceId, const char *fieldName, const void *buffer, int bufferSize)
+    {
+        if (!ManagedSetInstanceFieldValue)
+        {
+            return false;
+        }
+
+        return ManagedSetInstanceFieldValue(instanceId, fieldName, buffer, bufferSize) != 0;
+    }
+
+    bool DotNetHost::ConfigureSerialization(const char *serializeFieldAttributeTypeName, const char *entityTypeName)
+    {
+        if (!ManagedConfigureSerialization)
+        {
+            return false;
+        }
+
+        return ManagedConfigureSerialization(serializeFieldAttributeTypeName, entityTypeName) != 0;
+    }
+
+	int DotNetHost::BindInstanceMethod(uint64_t instanceId, const char *methodName, int signature)
     {
         if (!ManagedBindInstanceMethod)
         {
@@ -354,25 +501,45 @@ namespace MochiSharp
     bool DotNetHost::Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr)
     {
         if (!ManagedInvoke)
+            return false;
+
+        if (argCount < 0)
         {
+            std::cout << "[MochiSharp.Native] Invoke failed: negative argCount\n";
             return false;
         }
 
-        return ManagedInvoke(methodId, argsPtr, argCount, returnPtr) != 0;
+        if (argCount > 0 && argsPtr == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Invoke failed: argsPtr is null with argCount > 0\n";
+            return false;
+        }
+
+#ifdef _WIN32
+        __try
+        {
+            int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
+            return result != 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            std::cout << "[MochiSharp.Native] Invoke trapped structured exception (possible script runtime fault)\n";
+            return false;
+        }
+#else
+        int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
+        return result != 0;
+#endif
     }
 
     std::string DotNetHost::GetDerivedTypes(const char *asmPath, const char *baseType)
 	{
         if (!ManagedGetDerivedTypes)
-        {
             return {};
-        }
 
         const char *result = ManagedGetDerivedTypes(asmPath, baseType);
         if (!result)
-        {
             return {};
-        }
 
         std::string managedResult(result);
 #ifdef _WIN32
