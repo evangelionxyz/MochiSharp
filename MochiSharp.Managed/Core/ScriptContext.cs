@@ -28,8 +28,6 @@ namespace MochiSharp.Managed.Core
 				_coreAssembly = coreAssembly;
 			}
 
-
-
 			protected override Assembly? Load(AssemblyName assemblyName)
 			{
 				// Ensure the core is always shared from the default context to avoid type identity issues.

@@ -72,7 +72,7 @@ namespace MochiSharp
 
     public:
         static void EngineLog(const char *msg);
-        bool Init(const std::wstring &configPath);
+        bool Init(const std::wstring &configPath, EngineInterface::LogFunc logCb = nullptr);
         bool LoadAssembly(const char *path);
         bool RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
 		bool CreateInstance(const char *typeName, uint64_t instanceId);

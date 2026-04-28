@@ -97,7 +97,7 @@ namespace MochiSharp
         std::cout << "[MochiSharp.Native] " << msg << "\n";
     }
 
-    bool DotNetHost::Init(const std::wstring &configPath)
+    bool DotNetHost::Init(const std::wstring &configPath, EngineInterface::LogFunc logCb)
     {
         if (!LoadHostFxr())
         {
@@ -350,7 +350,7 @@ namespace MochiSharp
 
         // Call Initialize
         EngineInterface api;
-        api.LogMessage = &EngineLog;
+        api.LogMessage = logCb ? logCb : &EngineLog;
         ManagedInit(&api);
         EmitRuntimeStartedEvent();
 
@@ -515,21 +515,8 @@ namespace MochiSharp
             return false;
         }
 
-#ifdef _WIN32
-        __try
-        {
-            int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
-            return result != 0;
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-            std::cout << "[MochiSharp.Native] Invoke trapped structured exception (possible script runtime fault)\n";
-            return false;
-        }
-#else
         int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
         return result != 0;
-#endif
     }
 
     std::string DotNetHost::GetDerivedTypes(const char *asmPath, const char *baseType)

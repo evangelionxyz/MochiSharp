@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -409,12 +409,12 @@ namespace MochiSharp.Managed.Core
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
-                SafeLog($"Invoke failed: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
+                SafeLog($"Invoke failed:\n{ex.InnerException.ToString()}");
                 return 0;
             }
             catch (Exception ex)
             {
-                SafeLog($"Invoke failed: {ex.GetType().FullName}: {ex.Message}");
+                SafeLog($"Invoke failed:\n{ex.ToString()}");
                 return 0;
             }
         }
