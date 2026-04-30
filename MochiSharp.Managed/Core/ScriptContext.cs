@@ -612,7 +612,7 @@ namespace MochiSharp.Managed.Core
 				return false;
 			}
 
-			if (field.Name.StartsWith("<", StringComparison.Ordinal) || field.IsNotSerialized)
+			if (field.Name.StartsWith("<", StringComparison.Ordinal))
 			{
 				return false;
 			}
@@ -1009,7 +1009,7 @@ namespace MochiSharp.Managed.Core
 				return typeof(bool);
 			}
 
-			Type t = null;
+			Type? t = null;
 
 			// Try standard resolution first.
 			t = Type.GetType(typeName.Trim(), throwOnError: false);
