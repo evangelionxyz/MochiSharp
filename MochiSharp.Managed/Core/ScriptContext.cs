@@ -1023,15 +1023,64 @@ namespace MochiSharp.Managed.Core
                     return true;
                 }
 
-                var ctor = fieldType.GetConstructor(
-                    BindingFlags.Instance | BindingFlags.NonPublic,
-                    binder: null,
-                    types: new[] { typeof(ulong) },
-                    modifiers: null);
+                // If a managed instance was pre-created for this ID (e.g. a ScriptableObject
+                // populated before the entity field is wired up), reuse it.
+                if (_instances.TryGetValue(id, out var preCreated) && fieldType.IsInstanceOfType(preCreated))
+                {
+                    value = preCreated;
+                    return true;
+                }
+
+                // Walk up the type hierarchy to find ctor(ulong) — it may be declared on a base class
+                // (e.g., ScriptableObject.ctor(ulong) when the field type is a derived subclass like TestScriptableObject)
+                ConstructorInfo? ctor = null;
+                Type? searchType = fieldType;
+                while (searchType != null && searchType != typeof(object))
+                {
+                    ctor = searchType.GetConstructor(
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        binder: null,
+                        types: new[] { typeof(ulong) },
+                        modifiers: null);
+                    if (ctor != null) break;
+                    searchType = searchType.BaseType;
+                }
 
                 if (ctor == null)
                 {
                     return false;
+                }
+
+                // Create the concrete type using the ctor found (possibly from a base class)
+                // For derived types without their own ctor(ulong), use Activator.CreateInstance() + SetID
+                if (ctor.DeclaringType != fieldType)
+                {
+                    // The ctor belongs to a base class — create an instance of the concrete type
+                    // using its default ctor, then call SetID to assign the handle
+                    object? concreteInstance = null;
+                    try
+                    {
+                        concreteInstance = Activator.CreateInstance(
+                            fieldType,
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                            binder: null,
+                            args: null,
+                            culture: null);
+                    }
+                    catch { return false; }
+
+                    if (concreteInstance == null) return false;
+
+                    // Call SetID if available
+                    var setIdMethod = fieldType.GetMethod("SetID",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        binder: null,
+                        types: new[] { typeof(ulong) },
+                        modifiers: null);
+                    setIdMethod?.Invoke(concreteInstance, new object[] { id });
+
+                    value = concreteInstance;
+                    return true;
                 }
 
                 value = ctor.Invoke(new object[] { id });
