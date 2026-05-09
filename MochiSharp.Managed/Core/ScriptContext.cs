@@ -204,6 +204,74 @@ namespace MochiSharp.Managed.Core
             return BuildFieldMetadataPayload(type);
         }
 
+        /// <summary>
+        /// Returns CreateAssetMenu attribute data for all non-abstract ScriptableObject-derived classes
+        /// that are decorated with [CreateAssetMenu].
+        ///
+        /// Format: "FullClassName~FileName~MenuName|FullClassName~FileName~MenuName|..."
+        /// </summary>
+        public string GetCreateAssetMenuData(string baseTypeFullName)
+        {
+            if (string.IsNullOrWhiteSpace(baseTypeFullName))
+                return string.Empty;
+
+            var baseType = Type.GetType(baseTypeFullName, throwOnError: false)
+                ?? AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetType(baseTypeFullName, throwOnError: false))
+                    .FirstOrDefault(t => t != null);
+
+            if (baseType == null)
+                return string.Empty;
+
+            var sb = new System.Text.StringBuilder();
+
+            // Search for the CreateAssetMenu attribute type in all loaded assemblies
+            Type? createAssetMenuAttrType = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
+                .FirstOrDefault(t => t.FullName == "Ignite.CreateAssetMenu" || t.Name == "CreateAssetMenu");
+
+            if (createAssetMenuAttrType == null)
+                return string.Empty;
+
+            var derivedTypes = _pluginAssembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && baseType.IsAssignableFrom(t));
+
+            foreach (var type in derivedTypes)
+            {
+                var attrData = type.GetCustomAttributesData()
+                    .FirstOrDefault(a => a.AttributeType.FullName == createAssetMenuAttrType.FullName
+                                      || a.AttributeType.Name == createAssetMenuAttrType.Name);
+
+                if (attrData == null)
+                    continue;
+
+                string fileName = string.Empty;
+                string menuName = string.Empty;
+
+                foreach (var named in attrData.NamedArguments)
+                {
+                    if (named.MemberName == "FileName")
+                        fileName = named.TypedValue.Value as string ?? string.Empty;
+                    else if (named.MemberName == "MenuName")
+                        menuName = named.TypedValue.Value as string ?? string.Empty;
+                }
+
+                if (string.IsNullOrEmpty(fileName))
+                    fileName = type.Name;
+
+                if (sb.Length > 0)
+                    sb.Append('|');
+
+                sb.Append(type.FullName);
+                sb.Append('~');
+                sb.Append(fileName);
+                sb.Append('~');
+                sb.Append(menuName);
+            }
+
+            return sb.ToString();
+        }
+
         public void RegisterSignature(int signatureId, string returnTypeName, string[] parameterTypeNames)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(signatureId);

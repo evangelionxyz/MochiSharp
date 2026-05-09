@@ -197,6 +197,35 @@ namespace MochiSharp.Managed.Core
             return Marshal.StringToCoTaskMemUTF8(result);
         }
 
+        /// <summary>
+        /// Returns CreateAssetMenu attribute data for all ScriptableObject-derived classes that
+        /// have [CreateAssetMenu]. The base type is passed by full name (e.g. "Ignite.ScriptableObject").
+        /// Format: "FullClassName~FileName~MenuName|..."
+        /// </summary>
+        [UnmanagedCallersOnly]
+        public static IntPtr GetCreateAssetMenuData(IntPtr asmPathPtr, IntPtr baseTypeFullNamePtr)
+        {
+            try
+            {
+                string asmPath = Marshal.PtrToStringUTF8(asmPathPtr) ?? string.Empty;
+                string baseTypeFullName = Marshal.PtrToStringUTF8(baseTypeFullNamePtr) ?? string.Empty;
+
+                // If context matches loaded assembly, use it directly
+                if (_scriptContext != null)
+                {
+                    string result = _scriptContext.GetCreateAssetMenuData(baseTypeFullName);
+                    return Marshal.StringToCoTaskMemUTF8(result);
+                }
+
+                return Marshal.StringToCoTaskMemUTF8(string.Empty);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetCreateAssetMenuData failed: {ex.Message}");
+                return Marshal.StringToCoTaskMemUTF8(string.Empty);
+            }
+        }
+
         [UnmanagedCallersOnly]
         public static IntPtr GetInstanceFields(ulong instanceId)
         {

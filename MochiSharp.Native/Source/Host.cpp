@@ -356,6 +356,20 @@ namespace MochiSharp
             std::cout << "[MochiSharp.Native] Failed to load GetDerivedTypes function (rc: 0x" << std::hex << rc << std::dec << ")\n";
         }
 
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("GetCreateAssetMenuData"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedGetCreateAssetMenuData);
+
+        if (rc != 0 || ManagedGetCreateAssetMenuData == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Warning: GetCreateAssetMenuData not available (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            // Not fatal - older builds may not have this
+        }
+
         // Call Initialize
         EngineInterface api;
         api.LogMessage = logCb ? logCb : &EngineLog;
@@ -533,6 +547,22 @@ namespace MochiSharp
             return {};
 
         const char *result = ManagedGetDerivedTypes(asmPath, baseType);
+        if (!result)
+            return {};
+
+        std::string managedResult(result);
+#ifdef _WIN32
+        CoTaskMemFree((LPVOID)result);
+#endif
+        return managedResult;
+	}
+
+    std::string DotNetHost::GetCreateAssetMenuData(const char *asmPath, const char *baseType)
+	{
+        if (!ManagedGetCreateAssetMenuData)
+            return {};
+
+        const char *result = ManagedGetCreateAssetMenuData(asmPath, baseType);
         if (!result)
             return {};
 
