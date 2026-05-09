@@ -22,6 +22,7 @@
 extern hostfxr_initialize_for_runtime_config_fn init_fptr;
 extern hostfxr_get_runtime_delegate_fn get_delegate_fptr;
 extern hostfxr_close_fn close_fptr;
+extern hostfxr_set_error_writer_fn set_error_writer_fptr;
 
 namespace MochiSharp
 {

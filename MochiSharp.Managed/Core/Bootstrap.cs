@@ -38,7 +38,7 @@ namespace MochiSharp.Managed.Core
 
             try
             {
-                string fullPath = System.IO.Path.GetFullPath(path);
+                string fullPath = Path.GetFullPath(path);
                 _scriptContext = new ScriptContext(fullPath);
                 _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
                 _hostHook?.Log($"Loaded Script Assembly: {fullPath}");

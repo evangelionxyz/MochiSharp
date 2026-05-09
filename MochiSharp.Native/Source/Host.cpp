@@ -16,8 +16,14 @@
 hostfxr_initialize_for_runtime_config_fn init_fptr = nullptr;
 hostfxr_get_runtime_delegate_fn get_delegate_fptr = nullptr;
 hostfxr_close_fn close_fptr = nullptr;
+hostfxr_set_error_writer_fn set_error_writer_fptr = nullptr;
 
 #include <filesystem>
+
+static void HOSTFXR_CALLTYPE error_writer(const char_t *message)
+{
+    assert(false && message);
+}
 
 static std::filesystem::path GetExecutablePath()
 {
@@ -118,6 +124,8 @@ namespace MochiSharp
         {
             return false;
         }
+
+        set_error_writer_fptr(error_writer);
 
         load_assembly_and_get_function_pointer_fn load_assembly_and_get_function_pointer = nullptr;
         rc = get_delegate_fptr(
@@ -549,8 +557,9 @@ namespace MochiSharp
         init_fptr = (hostfxr_initialize_for_runtime_config_fn)GetProcAddress(lib, "hostfxr_initialize_for_runtime_config");
         get_delegate_fptr = (hostfxr_get_runtime_delegate_fn)GetProcAddress(lib, "hostfxr_get_runtime_delegate");
         close_fptr = (hostfxr_close_fn)GetProcAddress(lib, "hostfxr_close");
+        set_error_writer_fptr = (hostfxr_set_error_writer_fn)GetProcAddress(lib, "hostfxr_set_error_writer");
 
-        return (init_fptr && get_delegate_fptr && close_fptr);
+        return (init_fptr && get_delegate_fptr && close_fptr && set_error_writer_fptr);
     }
 
 }
