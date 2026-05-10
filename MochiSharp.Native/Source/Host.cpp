@@ -16,8 +16,14 @@
 hostfxr_initialize_for_runtime_config_fn init_fptr = nullptr;
 hostfxr_get_runtime_delegate_fn get_delegate_fptr = nullptr;
 hostfxr_close_fn close_fptr = nullptr;
+hostfxr_set_error_writer_fn set_error_writer_fptr = nullptr;
 
 #include <filesystem>
+
+static void HOSTFXR_CALLTYPE error_writer(const char_t *message)
+{
+    assert(false && message);
+}
 
 static std::filesystem::path GetExecutablePath()
 {
@@ -97,7 +103,7 @@ namespace MochiSharp
         std::cout << "[MochiSharp.Native] " << msg << "\n";
     }
 
-    bool DotNetHost::Init(const std::wstring &configPath)
+    bool DotNetHost::Init(const std::wstring &configPath, EngineInterface::LogFunc logCb)
     {
         if (!LoadHostFxr())
         {
@@ -118,6 +124,8 @@ namespace MochiSharp
         {
             return false;
         }
+
+        set_error_writer_fptr(error_writer);
 
         load_assembly_and_get_function_pointer_fn load_assembly_and_get_function_pointer = nullptr;
         rc = get_delegate_fptr(
@@ -348,9 +356,23 @@ namespace MochiSharp
             std::cout << "[MochiSharp.Native] Failed to load GetDerivedTypes function (rc: 0x" << std::hex << rc << std::dec << ")\n";
         }
 
+        rc = load_assembly_and_get_function_pointer(
+            managedCorePath.c_str(),
+            STR("MochiSharp.Managed.Core.Bootstrap, MochiSharp.Managed"),
+            STR("GetCreateAssetMenuData"),
+            UNMANAGEDCALLERSONLY_METHOD,
+            nullptr,
+            (void **)&ManagedGetCreateAssetMenuData);
+
+        if (rc != 0 || ManagedGetCreateAssetMenuData == nullptr)
+        {
+            std::cout << "[MochiSharp.Native] Warning: GetCreateAssetMenuData not available (rc: 0x" << std::hex << rc << std::dec << ")\n";
+            // Not fatal - older builds may not have this
+        }
+
         // Call Initialize
         EngineInterface api;
-        api.LogMessage = &EngineLog;
+        api.LogMessage = logCb ? logCb : &EngineLog;
         ManagedInit(&api);
         EmitRuntimeStartedEvent();
 
@@ -515,21 +537,8 @@ namespace MochiSharp
             return false;
         }
 
-#ifdef _WIN32
-        __try
-        {
-            int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
-            return result != 0;
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-            std::cout << "[MochiSharp.Native] Invoke trapped structured exception (possible script runtime fault)\n";
-            return false;
-        }
-#else
         int result = ManagedInvoke(methodId, argsPtr, argCount, returnPtr);
         return result != 0;
-#endif
     }
 
     std::string DotNetHost::GetDerivedTypes(const char *asmPath, const char *baseType)
@@ -538,6 +547,22 @@ namespace MochiSharp
             return {};
 
         const char *result = ManagedGetDerivedTypes(asmPath, baseType);
+        if (!result)
+            return {};
+
+        std::string managedResult(result);
+#ifdef _WIN32
+        CoTaskMemFree((LPVOID)result);
+#endif
+        return managedResult;
+	}
+
+    std::string DotNetHost::GetCreateAssetMenuData(const char *asmPath, const char *baseType)
+	{
+        if (!ManagedGetCreateAssetMenuData)
+            return {};
+
+        const char *result = ManagedGetCreateAssetMenuData(asmPath, baseType);
         if (!result)
             return {};
 
@@ -562,8 +587,9 @@ namespace MochiSharp
         init_fptr = (hostfxr_initialize_for_runtime_config_fn)GetProcAddress(lib, "hostfxr_initialize_for_runtime_config");
         get_delegate_fptr = (hostfxr_get_runtime_delegate_fn)GetProcAddress(lib, "hostfxr_get_runtime_delegate");
         close_fptr = (hostfxr_close_fn)GetProcAddress(lib, "hostfxr_close");
+        set_error_writer_fptr = (hostfxr_set_error_writer_fn)GetProcAddress(lib, "hostfxr_set_error_writer");
 
-        return (init_fptr && get_delegate_fptr && close_fptr);
+        return (init_fptr && get_delegate_fptr && close_fptr && set_error_writer_fptr);
     }
 
 }

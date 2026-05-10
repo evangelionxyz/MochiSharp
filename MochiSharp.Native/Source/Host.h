@@ -22,6 +22,7 @@
 extern hostfxr_initialize_for_runtime_config_fn init_fptr;
 extern hostfxr_get_runtime_delegate_fn get_delegate_fptr;
 extern hostfxr_close_fn close_fptr;
+extern hostfxr_set_error_writer_fn set_error_writer_fptr;
 
 namespace MochiSharp
 {
@@ -45,10 +46,7 @@ namespace MochiSharp
     typedef int (CORECLR_DELEGATE_CALLTYPE *BindStaticMethodFn)(const char *typeName, const char *methodName, int signature);
     typedef int (CORECLR_DELEGATE_CALLTYPE *InvokeFn)(int methodId, const void *argsPtr, int argCount, void *returnPtr);
     typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetDerivedTypesFn)(const char *asmPath, const char *baseType);
-
-    struct HostSettings
-    {
-    };
+    typedef const char *(CORECLR_DELEGATE_CALLTYPE *GetCreateAssetMenuDataFn)(const char *asmPath, const char *baseType);
 
     class DotNetHost
     {
@@ -69,10 +67,11 @@ namespace MochiSharp
         BindStaticMethodFn ManagedBindStaticMethod = nullptr;
         InvokeFn ManagedInvoke = nullptr;
         GetDerivedTypesFn ManagedGetDerivedTypes = nullptr;
+        GetCreateAssetMenuDataFn ManagedGetCreateAssetMenuData = nullptr;
 
     public:
         static void EngineLog(const char *msg);
-        bool Init(const std::wstring &configPath);
+        bool Init(const std::wstring &configPath, EngineInterface::LogFunc logCb = nullptr);
         bool LoadAssembly(const char *path);
         bool RegisterSignature(int signatureId, const char *returnTypeName, const char **parameterTypeNames, int parameterCount);
 		bool CreateInstance(const char *typeName, uint64_t instanceId);
@@ -87,6 +86,7 @@ namespace MochiSharp
         int BindStaticMethod(const char *typeName, const char *methodName, int signature);
         bool Invoke(int methodId, const void *argsPtr, int argCount, void *returnPtr);
         std::string GetDerivedTypes(const char *asmPath, const char *baseType);
+        std::string GetCreateAssetMenuData(const char *asmPath, const char *baseType);
     private:
         bool LoadHostFxr();
     };

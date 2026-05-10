@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -38,7 +38,7 @@ namespace MochiSharp.Managed.Core
 
             try
             {
-                string fullPath = System.IO.Path.GetFullPath(path);
+                string fullPath = Path.GetFullPath(path);
                 _scriptContext = new ScriptContext(fullPath);
                 _scriptContext.ConfigureSerializationTypeNames(_serializeFieldAttributeTypeName, _entityTypeName);
                 _hostHook?.Log($"Loaded Script Assembly: {fullPath}");
@@ -195,6 +195,35 @@ namespace MochiSharp.Managed.Core
 
             string result = GetDerivedTypesCore(asmPath, baseTypeFullName);
             return Marshal.StringToCoTaskMemUTF8(result);
+        }
+
+        /// <summary>
+        /// Returns CreateAssetMenu attribute data for all ScriptableObject-derived classes that
+        /// have [CreateAssetMenu]. The base type is passed by full name (e.g. "Ignite.ScriptableObject").
+        /// Format: "FullClassName~FileName~MenuName|..."
+        /// </summary>
+        [UnmanagedCallersOnly]
+        public static IntPtr GetCreateAssetMenuData(IntPtr asmPathPtr, IntPtr baseTypeFullNamePtr)
+        {
+            try
+            {
+                string asmPath = Marshal.PtrToStringUTF8(asmPathPtr) ?? string.Empty;
+                string baseTypeFullName = Marshal.PtrToStringUTF8(baseTypeFullNamePtr) ?? string.Empty;
+
+                // If context matches loaded assembly, use it directly
+                if (_scriptContext != null)
+                {
+                    string result = _scriptContext.GetCreateAssetMenuData(baseTypeFullName);
+                    return Marshal.StringToCoTaskMemUTF8(result);
+                }
+
+                return Marshal.StringToCoTaskMemUTF8(string.Empty);
+            }
+            catch (Exception ex)
+            {
+                _hostHook?.Log($"GetCreateAssetMenuData failed: {ex.Message}");
+                return Marshal.StringToCoTaskMemUTF8(string.Empty);
+            }
         }
 
         [UnmanagedCallersOnly]
@@ -409,12 +438,12 @@ namespace MochiSharp.Managed.Core
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
-                SafeLog($"Invoke failed: {ex.InnerException.GetType().FullName}: {ex.InnerException.Message}");
+                SafeLog($"Invoke failed:\n{ex.InnerException.ToString()}");
                 return 0;
             }
             catch (Exception ex)
             {
-                SafeLog($"Invoke failed: {ex.GetType().FullName}: {ex.Message}");
+                SafeLog($"Invoke failed:\n{ex.ToString()}");
                 return 0;
             }
         }
