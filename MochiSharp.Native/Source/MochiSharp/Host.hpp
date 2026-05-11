@@ -1,7 +1,7 @@
-// Copyright (c) 2025 Evangelion Manuhutu
+// Copyright (c) 2026 Evangelion Manuhutu
 
-#ifndef HOST_H
-#define HOST_H
+#ifndef HOST_HPP
+#define HOST_HPP
 
 #ifdef _WIN32
     #include <Windows.h>
@@ -24,7 +24,7 @@ extern hostfxr_get_runtime_delegate_fn get_delegate_fptr;
 extern hostfxr_close_fn close_fptr;
 extern hostfxr_set_error_writer_fn set_error_writer_fptr;
 
-namespace MochiSharp
+namespace mochi
 {
     struct EngineInterface
     {

@@ -2,7 +2,7 @@ project "Example.Managed"
     location "%{wks.location}/Example/Managed"
     kind "SharedLib"
     language "C#"
-    dotnetframework "net9.0"
+    dotnetframework "net10.0"
 
     targetdir (OUTPUT_DIR)
     objdir (INTOUTPUT_DIR)

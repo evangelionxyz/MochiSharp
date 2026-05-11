@@ -1,6 +1,8 @@
-// Copyright (c) 2025 Evangelion Manuhutu
+// Copyright (c) 2026 Evangelion Manuhutu
 
-#include "Host.h"
+#include "PCH.hpp"
+
+#include "Host.hpp"
 #include <iostream>
 #include <iomanip>
 #include <assert.h>
@@ -96,7 +98,7 @@ static std::filesystem::path ResolvePathRelativeToExecutable(const std::filesyst
     return std::filesystem::current_path() / path;
 }
 
-namespace MochiSharp
+namespace mochi
 {
     void DotNetHost::EngineLog(const char *msg)
     {
