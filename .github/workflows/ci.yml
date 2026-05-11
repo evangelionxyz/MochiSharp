@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate Solution with Premake5
         shell: pwsh
-        run: premake5 vs${{ env.VS_VERSION }}--file="premake5.lua"
+        run: premake5 vs${{ env.VS_VERSION }} --file="premake5.lua"
       
       - name: Restore NuGet packages
         shell: pwsh
@@ -54,4 +54,4 @@ jobs:
 
       - name: Build Visual Studio
         shell: pwsh
-        run: msbuild $env:SLNX_FILE /t:Build /p:Configuration=${{ matrix.configuration }} /p:Platform="x64" /m
+        run: msbuild $env:SLNX_FILE /t:Rebuild /p:Configuration=${{ matrix.configuration }} /p:Platform="x64"
