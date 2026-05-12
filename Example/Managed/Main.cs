@@ -13,6 +13,7 @@ namespace Example.Managed
     [Custom(Value = -2500.0f)]
     public class ExampleClass
     {
+
         public struct MyVec3
         {
             public float X;
