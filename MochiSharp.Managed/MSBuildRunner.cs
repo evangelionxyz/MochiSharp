@@ -1,10 +1,7 @@
-﻿namespace MochiSharp.Managed;
-
-using MochiSharp.Managed.Interop;
-using MochiSharp.Managed.Interop;
-using System.Collections.Generic;
+﻿using MochiSharp.Managed.Interop;
 using System.Runtime.InteropServices;
 
+namespace MochiSharp.Managed;
 
 public static class MSBuildRunner
 {
