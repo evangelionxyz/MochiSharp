@@ -7,6 +7,7 @@
 #include "Assembly.hpp"
 #include "ManagedObject.hpp"
 
+#include <filesystem>
 #include <functional>
 
 namespace mochi
@@ -55,7 +56,7 @@ namespace mochi
         void *LoadMochiSharpManagedFunctionPtr(const std::filesystem::path &InAssemblyPath, const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType = MOCHI_UNMANAGED_CALLERS_ONLY) const;
 
         template<typename TFunc>
-        TFunc LoadMochiSharpManagedFunctionPtr(const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType = MOCHI_UNMANAGED_CALLERS_ONLY) const
+        TFunc LoadMochiSharpManagedFunctionPtr(const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType=MOCHI_UNMANAGED_CALLERS_ONLY) const
         {
             return (TFunc)LoadMochiSharpManagedFunctionPtr(m_MochiSharpManagedAssemblyPath, InTypeName, InMethodName, InDelegateType);
         }

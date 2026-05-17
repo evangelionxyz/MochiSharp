@@ -97,7 +97,7 @@ namespace mochi
                 type.m_Id = typeId;
                 result.m_Types.push_back(TypeCache::Get().CacheType(std::move(type)));
 
-                Type &inserted = result.m_LocalTypes.emplace_back(std::move(type));
+                Type &inserted = result.m_LocalTypes.emplace_back(type);
                 result.m_LocalTypeIdCache[inserted.GetTypeId()] = &inserted;
                 result.m_LocalTypeNameCache[inserted.GetFullName()] = &inserted;
             }
