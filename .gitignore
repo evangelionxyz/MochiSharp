@@ -4,11 +4,12 @@ obj/
 bin/
 bin-int/
 
-**.csproj
-**vcxproj
 *.csproj
 *.vcxproj
 *.slnx
 *.sln
 *.user
+*.vcxproj.filters
+*.csproj.filters
+
 MochiSharp.Managed/Directory.Build.props
