@@ -27,9 +27,6 @@
     <ClInclude Include="Source\MochiSharp\GC.hpp">
       <Filter>MochiSharp</Filter>
     </ClInclude>
-    <ClInclude Include="Source\MochiSharp\Host.hpp">
-      <Filter>MochiSharp</Filter>
-    </ClInclude>
     <ClInclude Include="Source\MochiSharp\HostFXRErrorCodes.hpp">
       <Filter>MochiSharp</Filter>
     </ClInclude>
@@ -91,9 +88,6 @@
       <Filter>MochiSharp</Filter>
     </ClCompile>
     <ClCompile Include="Source\MochiSharp\GC.cpp">
-      <Filter>MochiSharp</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\MochiSharp\Host.cpp">
       <Filter>MochiSharp</Filter>
     </ClCompile>
     <ClCompile Include="Source\MochiSharp\HostInstance.cpp">
