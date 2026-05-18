@@ -65,12 +65,19 @@ namespace mochi
     class AssemblyLoadContext
     {
     public:
+        AssemblyLoadContext() = default;
+        AssemblyLoadContext(const AssemblyLoadContext &) = delete;
+        AssemblyLoadContext &operator=(const AssemblyLoadContext &) = delete;
+        AssemblyLoadContext(AssemblyLoadContext &&other) noexcept;
+        AssemblyLoadContext &operator=(AssemblyLoadContext &&other) noexcept;
+        ~AssemblyLoadContext();
+
         ManagedAssembly &LoadAssembly(std::string_view InFilePath);
         ManagedAssembly &LoadAssemblyFromMemory(const std::byte *data, int64_t dataLength);
         const StableVector<ManagedAssembly> &GetLoadedAssemblies() const { return m_LoadedAssemblies; }
 
     private:
-        int32_t m_ContextId;
+        int32_t m_ContextId = -1;
         StableVector<ManagedAssembly> m_LoadedAssemblies;
 
         HostInstance *m_Host = nullptr;

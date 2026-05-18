@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [master, dev, ignite-engine]
+    branches: [master]
   pull_request:
     branches: [master]
 
@@ -47,7 +47,7 @@ jobs:
       - name: Generate Solution with Premake5
         shell: pwsh
         run: premake5 vs${{ env.VS_VERSION }} --file="premake5.lua"
-      
+
       - name: Restore NuGet packages
         shell: pwsh
         run: msbuild $env:SLNX_FILE /t:Restore /p:Configuration=${{ matrix.configuration }} /p:Platform="x64"
