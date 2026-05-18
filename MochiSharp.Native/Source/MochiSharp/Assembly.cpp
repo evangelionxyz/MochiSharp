@@ -65,6 +65,41 @@ namespace mochi
     }
 
     // TODO: Massive de-dup needed between `LoadAssembly` and `LoadAssemblyFromMemory`.
+    AssemblyLoadContext::AssemblyLoadContext(AssemblyLoadContext &&other) noexcept
+        : m_ContextId(other.m_ContextId), m_LoadedAssemblies(std::move(other.m_LoadedAssemblies)), m_Host(other.m_Host)
+    {
+        other.m_ContextId = -1;
+        other.m_Host = nullptr;
+    }
+
+    AssemblyLoadContext &AssemblyLoadContext::operator=(AssemblyLoadContext &&other) noexcept
+    {
+        if (this != &other)
+        {
+            if (m_Host != nullptr && m_ContextId != -1)
+            {
+                m_Host->UnloadAssemblyLoadContext(*this);
+            }
+
+            m_ContextId = other.m_ContextId;
+            m_LoadedAssemblies = std::move(other.m_LoadedAssemblies);
+            m_Host = other.m_Host;
+
+            other.m_ContextId = -1;
+            other.m_Host = nullptr;
+        }
+
+        return *this;
+    }
+
+    AssemblyLoadContext::~AssemblyLoadContext()
+    {
+        if (m_Host != nullptr && m_ContextId != -1)
+        {
+            m_Host->UnloadAssemblyLoadContext(*this);
+        }
+    }
+
     ManagedAssembly &AssemblyLoadContext::LoadAssembly(std::string_view InFilePath)
     {
         auto filepath = String::New(InFilePath);
