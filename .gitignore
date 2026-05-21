@@ -12,4 +12,5 @@ bin-int/
 *.vcxproj.filters
 *.csproj.filters
 
+Makefile
 MochiSharp.Managed/Directory.Build.props

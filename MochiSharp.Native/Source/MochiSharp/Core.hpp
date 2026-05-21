@@ -17,8 +17,17 @@
 
 #ifdef _WIN32
 #   define MOCHI_PLATFORM_WINDOWS
+#   define PLATFORM_MAX_PATH MAX_PATH
 #elif defined(__APPLE__)
 #   define MOCHI_PLATFORM_APPLE
+#elif defined(__linux__)
+#   include <limits.h>
+#   ifndef PATH_MAX
+#       include<linux/limits.h>
+#   endif
+#   define PLATFORM_MAX_PATH PATH_MAX
+#else
+#   define PLATFORM_MAX_PATH 4096
 #endif
 
 #ifdef MOCHI_PLATFORM_WINDOWS
