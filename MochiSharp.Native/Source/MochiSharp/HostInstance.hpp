@@ -53,10 +53,11 @@ namespace mochi
         bool InitializeMochiSharpManaged();
         void LoadMochiSharpFunctions();
 
-        void *LoadMochiSharpManagedFunctionPtr(const std::filesystem::path &InAssemblyPath, const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType = MOCHI_UNMANAGED_CALLERS_ONLY) const;
+        void *LoadMochiSharpManagedFunctionPtr(const std::filesystem::path &InAssemblyPath, const UCChar *InTypeName,
+            const UCChar *InMethodName, const UCChar *InDelegateType = UnmanagedCallersOnly) const;
 
         template<typename TFunc>
-        TFunc LoadMochiSharpManagedFunctionPtr(const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType=MOCHI_UNMANAGED_CALLERS_ONLY) const
+        TFunc LoadMochiSharpManagedFunctionPtr(const UCChar *InTypeName, const UCChar *InMethodName, const UCChar *InDelegateType = UnmanagedCallersOnly) const
         {
             return (TFunc)LoadMochiSharpManagedFunctionPtr(m_MochiSharpManagedAssemblyPath, InTypeName, InMethodName, InDelegateType);
         }

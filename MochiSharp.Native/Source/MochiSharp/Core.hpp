@@ -75,10 +75,10 @@ namespace mochi
 }
 #endif
 
-#define MOCHI_UNMANAGED_CALLERS_ONLY ((const UCChar*) (-1ULL))
-
 namespace mochi
 {
+	inline const UCChar* UnmanagedCallersOnly = reinterpret_cast<const UCChar*>(UINTPTR_MAX);
+
     using Bool32 = uint32_t;
     static_assert(sizeof(Bool32) == 4);
 
