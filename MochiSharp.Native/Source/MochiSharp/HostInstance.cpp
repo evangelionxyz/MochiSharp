@@ -148,7 +148,7 @@ namespace mochi
 
     static std::filesystem::path GetHostFXRPath()
     {
-        char_t buffer[MAX_PATH];
+        char_t buffer[PLATFORM_MAX_PATH];
         size_t bufferSize = sizeof(buffer) / sizeof(buffer[0]);
         int rc = get_hostfxr_path(buffer, &bufferSize, nullptr);
         if (rc != 0)

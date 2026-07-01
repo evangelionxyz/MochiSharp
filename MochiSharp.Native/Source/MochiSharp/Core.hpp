@@ -17,8 +17,17 @@
 
 #ifdef _WIN32
 #   define MOCHI_PLATFORM_WINDOWS
+#   define PLATFORM_MAX_PATH MAX_PATH
 #elif defined(__APPLE__)
 #   define MOCHI_PLATFORM_APPLE
+#elif defined(__linux__)
+#   include <limits.h>
+#   ifndef PATH_MAX
+#       include<linux/limits.h>
+#   endif
+#   define PLATFORM_MAX_PATH PATH_MAX
+#else
+#   define PLATFORM_MAX_PATH 4096
 #endif
 
 #ifdef MOCHI_PLATFORM_WINDOWS
@@ -66,10 +75,10 @@ namespace mochi
 }
 #endif
 
-#define MOCHI_UNMANAGED_CALLERS_ONLY ((const UCChar*) (-1ULL))
-
 namespace mochi
 {
+	inline const UCChar* UnmanagedCallersOnly = reinterpret_cast<const UCChar*>(UINTPTR_MAX);
+
     using Bool32 = uint32_t;
     static_assert(sizeof(Bool32) == 4);
 

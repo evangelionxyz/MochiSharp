@@ -18,10 +18,13 @@
 #include <set>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
-#   include <Windows.h>
+#endif
+
+#include <Windows.h>
 #else
-#   include <dlfcn.h>
+#include <dlfcn.h>
 #endif
 
 #include <filesystem>
