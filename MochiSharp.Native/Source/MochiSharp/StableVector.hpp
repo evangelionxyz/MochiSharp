@@ -3,6 +3,7 @@
 #define MOCHI_STABLE_VECTOR
 
 #include <vector>
+#include <cstring>
 #include <array>
 #include <mutex>
 #include <shared_mutex>
