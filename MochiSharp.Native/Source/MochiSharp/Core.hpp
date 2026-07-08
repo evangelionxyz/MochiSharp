@@ -64,6 +64,8 @@ namespace mochi
 #else
 #   define MOCHI_STR(s) s
 
+typedef char char_t;
+
 using CharType [[deprecated(MOCHI_LEAK_UC_TYPES_MSG_P(mochi::UChar))]] = char_t;
 using StringView [[deprecated(MOCHI_LEAK_UC_TYPES_MSG_P(mochi::UCStringview))]] = std::string_view;
 
