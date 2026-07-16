@@ -3,14 +3,17 @@ project "MochiSharp.Managed"
     kind "SharedLib"
     language "C#"
     dotnetframework "net10.0"
-    vsprops {
-        AppendTargetFrameworkToOutputPath = "false",
-        Nullable = "enable",
-        AllowUnsafeBlocks = "true",
-        CopyLocalLockFileAssemblies = "true",
-        EnableDynamicLoading = "true",
-        ImplicitUsing = "enable"
-    }
+    
+    filter { "action:vs* or system:windows" }
+        vsprops {
+            AppendTargetFrameworkToOutputPath = "false",
+            DebugType = "pdbonly",
+            Nullable = "enable",
+            AllowUnsafeBlocks = "true",
+            CopyLocalLockFileAssemblies = "true",
+            EnableDynamicLoading = "true",
+            ImplicitUsing = "enable"
+        }
 
     -- Don't specify architecture here. (see https://github.com/premake/premake-core/issues/1758)
 
@@ -21,3 +24,11 @@ project "MochiSharp.Managed"
         "Managed/**.cs",
         "Interop/**.cs",
     }
+
+    filter "configurations:Debug"
+        symbols "on"
+        optimize "off"
+
+    filter "configurations:Release"
+        optimize "on"
+        symbols "off"
