@@ -1,12 +1,12 @@
-﻿using MochiSharp.Managed.Interop;
+using MochiSharp.Managed.Interop;
 using System;
 using System.Runtime.InteropServices;
 
 namespace MochiSharp.Managed;
 
-internal enum MessageLevel { Trace = 1, Info = 2, Warning = 4, Error = 8 }
+public enum MessageLevel { Trace = 1, Info = 2, Warning = 4, Error = 8 }
 
-internal static class ManagedHost
+public static class ManagedHost
 {
     private static unsafe delegate*<NativeString, void> s_ExceptionCallback;
     private static unsafe delegate*<NativeString, MessageLevel, void> s_MessageCallback;
@@ -19,7 +19,7 @@ internal static class ManagedHost
     }
 
 
-    internal static void LogMessage(string message, MessageLevel level)
+    public static void LogMessage(string message, MessageLevel level)
     {
         unsafe
         {
