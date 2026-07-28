@@ -1,4 +1,4 @@
-﻿using MochiSharp.Managed.Interop;
+using MochiSharp.Managed.Interop;
 using System;
 using System.Linq;
 using System.Reflection;
@@ -64,19 +64,19 @@ public static class Marshalling
                 Marshal.WriteIntPtr(outValue, IntPtr.Zero);
             }
         }
-        else if (type == typeof(string) && value != null)
+        else if (type == typeof(string))
         {
-            NativeString nativeString = (NativeString)(string)value;
+            NativeString nativeString = (NativeString)(string?)value;
             Marshal.StructureToPtr(nativeString, outValue, false);
         }
-        else if (type == typeof(bool) && value != null)
+        else if (type == typeof(bool))
         {
-            Bool32 bValue = (Bool32)(bool)value;
+            Bool32 bValue = (Bool32)(value is bool b && b);
             Marshal.StructureToPtr(bValue, outValue, false);
         }
-        else if (type == typeof(NativeString) && value != null)
+        else if (type == typeof(NativeString))
         {
-            NativeString nativeString = (NativeString)value;
+            NativeString nativeString = value is NativeString ns ? ns : default;
             Marshal.StructureToPtr(nativeString, outValue, false);
         }
         else if (type != null && type.IsPointer)
@@ -96,15 +96,23 @@ public static class Marshalling
         }
         else if (type != null)
         {
-            int valueSize = type.IsEnum ? Marshal.SizeOf(Enum.GetUnderlyingType(type)) : Marshal.SizeOf(type);
-            GCHandle handle = GCHandle.Alloc(value, GCHandleType.Pinned);
-
-            unsafe
+            if (!type.IsValueType)
             {
-                Buffer.MemoryCopy(handle.AddrOfPinnedObject().ToPointer(), outValue.ToPointer(), valueSize, valueSize);
+                // Reference types (classes, objects): avoid Marshal.SizeOf(type) which throws for managed classes
+                Marshal.WriteIntPtr(outValue, IntPtr.Zero);
             }
+            else
+            {
+                int valueSize = type.IsEnum ? Marshal.SizeOf(Enum.GetUnderlyingType(type)) : Marshal.SizeOf(type);
+                GCHandle handle = GCHandle.Alloc(value, GCHandleType.Pinned);
 
-            handle.Free();
+                unsafe
+                {
+                    Buffer.MemoryCopy(handle.AddrOfPinnedObject().ToPointer(), outValue.ToPointer(), valueSize, valueSize);
+                }
+
+                handle.Free();
+            }
         }
         else throw new ArgumentNullException("memberInfo:Type");
     }
